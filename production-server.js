@@ -850,6 +850,22 @@ function attachSessionMiddleware() {
   });
 }
 
+async function ensureDiscordUser(discordUserId, userLike = {}) {
+  const id = String(discordUserId);
+  const username = String(userLike.username || 'discord-user').slice(0, 80);
+  const displayName = String(userLike.displayName || userLike.globalName || username).slice(0, 100);
+  const avatar = typeof userLike.displayAvatarURL === 'function'
+    ? userLike.displayAvatarURL({ extension: 'png', size: 128 })
+    : '';
+  await database.run(
+    `INSERT INTO users (discord_user_id, username, display_name, avatar, guild_id)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(discord_user_id) DO UPDATE SET username = excluded.username, display_name = excluded.display_name, avatar = excluded.avatar, guild_id = excluded.guild_id, updated_at = CURRENT_TIMESTAMP`,
+    [id, username, displayName, avatar, process.env.DISCORD_GUILD_ID]
+  );
+  return getUser(id);
+}
+
 async function handleDiscordLevelCommand(target) {
   if (target === 'leaderboard') {
     return database.all('SELECT display_name AS "displayName", username, xp, level FROM users WHERE guild_id = ? ORDER BY level DESC, xp DESC, display_name ASC LIMIT 10', [process.env.DISCORD_GUILD_ID]);
@@ -886,7 +902,7 @@ async function handleDiscordEventCommand(interaction, subcommand) {
   const endTime = endText ? parseCommandDate(endText) : new Date(startTime.getTime() + 60 * 60 * 1000);
   if (!title || Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || endTime <= startTime) return interaction.reply({ content: 'Invalid time. Use an ISO timestamp or `YYYY-MM-DD HH:mm` in the server timezone.', ephemeral: true });
   if (startTime <= new Date()) return interaction.reply({ content: 'The event must start in the future.', ephemeral: true });
-  const user = await getUser(interaction.user.id);
+  const user = await ensureDiscordUser(interaction.user.id, interaction.user);
   const host = user?.display_name || interaction.member?.displayName || interaction.user.globalName || interaction.user.username;
   const id = crypto.randomUUID();
   const event = { id, title, description, type, host: String(host).slice(0, 100), host_discord_user_id: String(interaction.user.id), start_time: startTime.toISOString(), end_time: endTime.toISOString(), status: 'upcoming' };
