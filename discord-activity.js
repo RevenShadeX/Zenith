@@ -32,25 +32,39 @@ async function recordGuildMessage(database, message, guildId) {
   );
   if (!inserted.changes) return false;
 
-  const userState = await database.get(
-    'SELECT xp, last_xp_at FROM users WHERE discord_user_id = ?',
-    [discordUserId]
-  );
-  const lastXpAt = userState?.last_xp_at ? new Date(userState.last_xp_at).getTime() : 0;
+  const processedAt = Date.now();
   const messageTime = new Date(createdAt).getTime();
-  const awardXp = !lastXpAt || messageTime - lastXpAt >= 60_000;
-  const xpGain = awardXp ? 15 : 0;
-  const newXp = Number(userState?.xp || 0) + xpGain;
-  const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1;
+  const xpWindowStart = new Date(processedAt - 60_000).toISOString();
 
   await database.run(
     `UPDATE users SET tracked_message_count = tracked_message_count + 1,
-     xp = ?, level = ?, points = points + 1,
+     points = points + 1,
      last_message_at = CASE WHEN last_message_at IS NULL OR last_message_at < ? THEN ? ELSE last_message_at END,
-     last_xp_at = CASE WHEN ? > 0 THEN ? ELSE last_xp_at END,
      updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?`,
-    [newXp, newLevel, createdAt, createdAt, xpGain, createdAt, discordUserId]
+    [createdAt, createdAt, discordUserId]
   );
+
+  // Claim the XP cooldown atomically. This prevents two near-simultaneous
+  // Discord messages from both awarding XP based on the same old timestamp.
+  const xpClaim = await database.run(
+    `UPDATE users SET last_xp_at = ?, updated_at = CURRENT_TIMESTAMP
+     WHERE discord_user_id = ?
+       AND (last_xp_at IS NULL OR last_xp_at <= ?)`,
+    [new Date(processedAt).toISOString(), discordUserId, xpWindowStart]
+  );
+
+  if (xpClaim.changes) {
+    const userState = await database.get(
+      'SELECT xp FROM users WHERE discord_user_id = ?',
+      [discordUserId]
+    );
+    const newXp = Number(userState?.xp || 0) + 15;
+    const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1;
+    await database.run(
+      'UPDATE users SET xp = ?, level = ?, updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?',
+      [newXp, newLevel, discordUserId]
+    );
+  }
   return true;
 }
 
