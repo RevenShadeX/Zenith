@@ -866,12 +866,11 @@ async function ensureDiscordUser(discordUserId, userLike = {}) {
   return getUser(id);
 }
 
-async function handleDiscordLevelCommand(target) {
+async function handleDiscordLevelCommand(target, userLike) {
   if (target === 'leaderboard') {
     return database.all('SELECT display_name AS "displayName", username, xp, level FROM users WHERE guild_id = ? ORDER BY level DESC, xp DESC, display_name ASC LIMIT 10', [process.env.DISCORD_GUILD_ID]);
   }
-  const user = await getUser(String(target));
-  if (!user) return null;
+  const user = await ensureDiscordUser(String(target), userLike || {});
   return { displayName: user.display_name || user.username, xp: Number(user.xp || 0), level: Number(user.level || 1), messages: Number(user.tracked_message_count || 0) };
 }
 
