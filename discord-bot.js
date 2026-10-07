@@ -164,4 +164,4 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
   return { client, getGuildMember, isGuildAdministrator, ready, commands: COMMANDS };
 }
 
-module.exports = { createDiscordBot, isTrackableMessage };
+module.exports = { COMMANDS, createDiscordBot, isTrackableMessage };
