@@ -81,6 +81,17 @@ function startDiscordLogin() {
   else showToast('Discord sign-in is not configured on this server.', 'error');
 }
 
+async function refreshEvents() {
+  try {
+    const response = await fetchJson('/api/events');
+    state.events = response.events || [];
+    state.events.sort((left, right) => new Date(left.start_time) - new Date(right.start_time));
+    if (state.page === 'events' || state.page === 'home') renderApp();
+  } catch {
+    // Keep the last known event list if a background refresh fails.
+  }
+}
+
 function navigate(page, roomId = null) {
   const previousPage = state.page;
   const previousRoomId = state.roomId;
@@ -97,6 +108,7 @@ function navigate(page, roomId = null) {
   renderApp();
   if (state.page === 'watch' && state.roomId && state.user) connectRoomSocket(state.roomId);
   if (state.page === 'community') refreshLeaderboard(state.leaderboardPeriod);
+  if (state.page === 'events') refreshEvents();
 }
 
 function renderTopbar() {
@@ -173,7 +185,7 @@ function renderLeaderboard(users = state.leaderboard, limit = users.length) {
       <span class="rank-number">${String(index + 1).padStart(2, '0')}</span>
       <img class="avatar member-avatar" src="${escapeHtml(user.avatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=member')}" alt="" />
       <span class="member-name">${escapeHtml(user.display_name || user.username || 'Member')}${user.id === state.user?.id ? '<small>YOU</small>' : ''}</span>
-      <span class="member-points">${Number(user.message_count || 0).toLocaleString()} <small>MESSAGES</small></span>
+      <span class="member-points">LEVEL ${Number(user.level || 1)} · ${Number(user.xp || 0).toLocaleString()} <small>XP</small></span>
     </article>
   `).join('');
 }
@@ -827,12 +839,14 @@ async function boot() {
     renderApp();
     if (state.page === 'watch' && state.roomId && state.user) connectRoomSocket(state.roomId);
     if (state.page === 'community') refreshLeaderboard(state.leaderboardPeriod);
+    if (state.page === 'events') refreshEvents();
   });
   await loadInitial();
   renderTopbar();
   renderApp();
   if (state.page === 'watch' && state.roomId && state.user) connectRoomSocket(state.roomId);
   if (state.page === 'community') refreshLeaderboard(state.leaderboardPeriod);
+  if (state.page === 'events') refreshEvents();
 }
 
 boot();
