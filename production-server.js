@@ -161,6 +161,30 @@ async function getTrackingInfo() {
   };
 }
 
+const DAILY_WORDS = ['PLANT', 'STONE', 'CRANE', 'BRAVE', 'PIXEL', 'SHINE', 'QUEST', 'GAMER'];
+
+function zenithDateKey(date = new Date()) {
+  const timeZone = process.env.ZENITH_TIMEZONE || 'Asia/Colombo';
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return values.year + '-' + values.month + '-' + values.day;
+}
+
+async function getDailyGameState(discordUserId, dateKey = zenithDateKey()) {
+  let daily = await database.get('SELECT word FROM daily_words WHERE date_key = ?', [dateKey]);
+  if (!daily) {
+    let hash = 0;
+    for (const character of dateKey) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+    const word = DAILY_WORDS[hash % DAILY_WORDS.length];
+    await database.run('INSERT OR IGNORE INTO daily_words (date_key, word) VALUES (?, ?)', [dateKey, word]);
+    daily = await database.get('SELECT word FROM daily_words WHERE date_key = ?', [dateKey]);
+  }
+  const attempts = await database.get('SELECT guesses, solved, guesses_json FROM daily_game_attempts WHERE date_key = ? AND discord_user_id = ?', [dateKey, discordUserId]);
+  let guesses = [];
+  try { guesses = attempts ? JSON.parse(attempts.guesses_json || '[]') : []; } catch { guesses = []; }
+  return { date: dateKey, attempts: guesses, solved: Boolean(attempts?.solved), answer: attempts?.solved ? daily.word : null, attemptsRemaining: Math.max(0, 6 - guesses.length) };
+}
+
 async function getMessageLeaderboard(period = 'all_time', now = new Date()) {
   return getDiscordLeaderboard(database, process.env.DISCORD_GUILD_ID || 'unconfigured', period, now);
 }
@@ -739,35 +763,30 @@ function createApp() {
     res.json({ ok: true, eventId: event.id });
   }));
 
-  app.get('/api/games/daily-word', (req, res) => {
-    const date = new Date().toISOString().slice(0, 10);
-    res.json({ date, attempts: 6, length: 5, status: 'ready' });
-  });
+  app.get('/api/games/daily-word', requireAuth, asyncRoute(async (req, res) => {
+    const game = await getDailyGameState(req.session.discordUserId);
+    res.json({ date: game.date, attempts: game.attempts, attemptsRemaining: game.attemptsRemaining, solved: game.solved, ...(game.solved ? { answer: game.answer } : {}), length: 5, status: 'ready' });
+  }));
 
   app.post('/api/games/daily-word/guess', requireSameOrigin, requireAuth, guessLimiter, asyncRoute(async (req, res) => {
     const guess = String(req.body?.guess || '').toUpperCase();
-    const words = ['PLANT', 'STONE', 'CRANE', 'BRAVE', 'PIXEL', 'SHINE', 'QUEST', 'GAMER'];
-    const day = Number(new Date().toISOString().replace(/-/g, '').slice(6, 8));
-    const answer = words[day % words.length];
     if (!/^[A-Z]{5}$/.test(guess)) return res.status(400).json({ error: 'Guess must be a 5-letter word.' });
-
+    const dateKey = zenithDateKey();
+    const game = await getDailyGameState(req.session.discordUserId, dateKey);
+    if (game.solved) return res.status(409).json({ error: 'You already solved today’s puzzle.' });
+    if (game.attempts.length >= 6) return res.status(409).json({ error: 'You have used all six attempts for today.' });
+    const answer = (await database.get('SELECT word FROM daily_words WHERE date_key = ?', [dateKey])).word;
     const result = Array(5).fill('gray');
     const counts = {};
     for (const letter of answer) counts[letter] = (counts[letter] || 0) + 1;
-    for (let index = 0; index < 5; index += 1) {
-      if (guess[index] === answer[index]) {
-        result[index] = 'green';
-        counts[guess[index]] -= 1;
-      }
-    }
-    for (let index = 0; index < 5; index += 1) {
-      if (result[index] !== 'green' && counts[guess[index]] > 0) {
-        result[index] = 'yellow';
-        counts[guess[index]] -= 1;
-      }
-    }
+    for (let index = 0; index < 5; index += 1) if (guess[index] === answer[index]) { result[index] = 'green'; counts[guess[index]] -= 1; }
+    for (let index = 0; index < 5; index += 1) if (result[index] !== 'green' && counts[guess[index]] > 0) { result[index] = 'yellow'; counts[guess[index]] -= 1; }
     const solved = result.every((tile) => tile === 'green');
-    res.json({ solved, result, ...(solved ? { answer } : {}) });
+    const attempts = [...game.attempts, { guess, result }];
+    await database.run(`INSERT INTO daily_game_attempts (date_key, discord_user_id, guesses, solved, guesses_json)
+      VALUES (?, ?, ?, ?, ?) ON CONFLICT(date_key, discord_user_id) DO UPDATE SET guesses = excluded.guesses, solved = excluded.solved, guesses_json = excluded.guesses_json`,
+      [dateKey, req.session.discordUserId, attempts.length, solved, JSON.stringify(attempts)]);
+    res.json({ solved, result, attemptsRemaining: Math.max(0, 6 - attempts.length), ...(solved ? { answer } : {}) });
   }));
 
   app.get('/api/admin', requireAuth, requireGuildAdmin, asyncRoute(async (req, res) => {
