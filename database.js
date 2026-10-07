@@ -185,6 +185,14 @@ function createDatabase(options = {}) {
         word TEXT NOT NULL,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
+      `CREATE TABLE IF NOT EXISTS daily_game_attempts (
+        date_key TEXT NOT NULL,
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        guesses INTEGER NOT NULL DEFAULT 0,
+        solved INTEGER NOT NULL DEFAULT 0,
+        guesses_json TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY (date_key, discord_user_id)
+      )`,
     ];
     for (const statement of statements) await run(statement);
 
@@ -364,6 +372,14 @@ function createDatabase(options = {}) {
         date_key TEXT PRIMARY KEY,
         word TEXT NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )`,
+      `CREATE TABLE IF NOT EXISTS daily_game_attempts (
+        date_key TEXT NOT NULL,
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        guesses INTEGER NOT NULL DEFAULT 0,
+        solved BOOLEAN NOT NULL DEFAULT FALSE,
+        guesses_json TEXT NOT NULL DEFAULT '[]',
+        PRIMARY KEY (date_key, discord_user_id)
       )`,
       'CREATE INDEX IF NOT EXISTS idx_discord_events_guild_created ON discord_message_events (guild_id, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_discord_events_author_created ON discord_message_events (author_discord_user_id, created_at)',
