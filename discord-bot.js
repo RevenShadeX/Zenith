@@ -128,7 +128,18 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
         }
         return onEventCommand?.(interaction, subcommand);
       }
-    })()).catch(onError);
+    })()).catch(async (error) => {
+      onError(error);
+      try {
+        if (interaction.replied || interaction.deferred) {
+          await interaction.followUp({ content: 'Zenith could not complete that command. Please try again.', ephemeral: true });
+        } else {
+          await interaction.reply({ content: 'Zenith could not complete that command. Please try again.', ephemeral: true });
+        }
+      } catch (replyError) {
+        onError(replyError);
+      }
+    });
   });
 
   client.on(Events.Error, onError);
