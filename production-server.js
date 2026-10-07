@@ -850,6 +850,64 @@ function attachSessionMiddleware() {
   });
 }
 
+async function handleDiscordLevelCommand(target) {
+  if (target === 'leaderboard') {
+    return database.all('SELECT display_name AS "displayName", username, xp, level FROM users WHERE guild_id = ? ORDER BY level DESC, xp DESC, display_name ASC LIMIT 10', [process.env.DISCORD_GUILD_ID]);
+  }
+  const user = await getUser(String(target));
+  if (!user) return null;
+  return { displayName: user.display_name || user.username, xp: Number(user.xp || 0), level: Number(user.level || 1), messages: Number(user.tracked_message_count || 0) };
+}
+
+function discordEventTime(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Invalid time' : '<t:' + Math.floor(date.getTime() / 1000) + ':F>';
+}
+
+async function handleDiscordEventCommand(interaction, subcommand) {
+  if (subcommand === 'list') {
+    const events = await database.all("SELECT id, title, description, type, start_time, end_time, status FROM events WHERE status = 'upcoming' AND end_time > ? ORDER BY start_time ASC LIMIT 10", [new Date().toISOString()]);
+    if (!events.length) return interaction.reply({ content: 'There are no upcoming Zenith events.' });
+    const lines = events.map((event) => '• **' + event.title + '** — ' + discordEventTime(event.start_time) + ' — ID: `' + event.id + '`');
+    return interaction.reply({ content: '**Upcoming Zenith events**\n' + lines.join('\n') });
+  }
+  if (subcommand === 'cancel') {
+    const eventId = interaction.options.getString('event_id', true);
+    const event = await database.get("SELECT id, title FROM events WHERE id = ? AND status = 'upcoming'", [eventId]);
+    if (!event) return interaction.reply({ content: 'That Zenith event does not exist or is already finished.', ephemeral: true });
+    await database.run("UPDATE events SET status = 'cancelled' WHERE id = ?", [eventId]);
+    return interaction.reply({ content: 'Cancelled **' + event.title + '** and removed it from the website calendar.' });
+  }
+  const title = sanitizeText(interaction.options.getString('title', true), 100);
+  const description = sanitizeText(interaction.options.getString('description') || '', 500);
+  const type = sanitizeText(interaction.options.getString('type') || 'COMMUNITY EVENT', 40).toUpperCase() || 'COMMUNITY EVENT';
+  const startTime = parseCommandDate(interaction.options.getString('start', true));
+  const endText = interaction.options.getString('end');
+  const endTime = endText ? parseCommandDate(endText) : new Date(startTime.getTime() + 60 * 60 * 1000);
+  if (!title || Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || endTime <= startTime) return interaction.reply({ content: 'Invalid time. Use an ISO timestamp or `YYYY-MM-DD HH:mm` in the server timezone.', ephemeral: true });
+  if (startTime <= new Date()) return interaction.reply({ content: 'The event must start in the future.', ephemeral: true });
+  const user = await getUser(interaction.user.id);
+  const host = user?.display_name || interaction.member?.displayName || interaction.user.globalName || interaction.user.username;
+  const id = crypto.randomUUID();
+  const event = { id, title, description, type, host: String(host).slice(0, 100), host_discord_user_id: String(interaction.user.id), start_time: startTime.toISOString(), end_time: endTime.toISOString(), status: 'upcoming' };
+  await database.run('INSERT INTO events (id, title, description, type, host, host_discord_user_id, start_time, end_time, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', [event.id, event.title, event.description, event.type, event.host, event.host_discord_user_id, event.start_time, event.end_time, event.status]);
+  return interaction.reply({ content: 'Added **' + event.title + '** to the Zenith website calendar.\nStarts ' + discordEventTime(event.start_time) + '\nEvent ID: `' + event.id + '`' });
+}
+
+function parseCommandDate(value) {
+  const text = String(value || '').trim();
+  const direct = new Date(text);
+  if (!Number.isNaN(direct.getTime())) return direct;
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})$/);
+  if (!match) return new Date(NaN);
+  const [, year, month, day, hour, minute] = match;
+  const zone = process.env.ZENITH_TIMEZONE || 'Asia/Colombo';
+  const naive = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)));
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).formatToParts(naive);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  const zoneAsUtc = Date.UTC(Number(values.year), Number(values.month) - 1, Number(values.day), Number(values.hour), Number(values.minute));
+  return new Date(naive.getTime() - (zoneAsUtc - naive.getTime()));
+}
 async function startServer() {
   await database.initialize();
   if (BOT_CONFIGURED) {
@@ -857,6 +915,8 @@ async function startServer() {
       token: process.env.DISCORD_BOT_TOKEN,
       guildId: process.env.DISCORD_GUILD_ID,
       onMessage: recordDiscordMessage,
+      onLevel: handleDiscordLevelCommand,
+      onEventCommand: handleDiscordEventCommand,
       onReady: async () => {
         await database.run('INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)', [trackingDateKey(), new Date().toISOString()]);
       },
