@@ -161,13 +161,49 @@ async function getTrackingInfo() {
   };
 }
 
-const DAILY_WORDS = ['PLANT', 'STONE', 'CRANE', 'BRAVE', 'PIXEL', 'SHINE', 'QUEST', 'GAMER'];
+const DAILY_WORDS = [
+  'APPLE', 'BEACH', 'BRAIN', 'BRAVE', 'CHAIR', 'CHESS', 'CLOUD', 'CRANE', 'DREAM', 'EARTH',
+  'FLAME', 'FRAME', 'FRUIT', 'GIANT', 'GRAPE', 'GRASS', 'GREEN', 'HEART', 'HOUSE', 'IMAGE',
+  'JUICE', 'KNIFE', 'LIGHT', 'MAGIC', 'MANGO', 'MONEY', 'MUSIC', 'NIGHT', 'OCEAN', 'PAINT',
+  'PAPER', 'PARTY', 'PEACH', 'PEARL', 'PIANO', 'PIXEL', 'PLANT', 'PLATE', 'POINT', 'POWER',
+  'QUEST', 'QUIET', 'RADIO', 'RIVER', 'ROBOT', 'ROUND', 'ROYAL', 'SCALE', 'SHINE', 'SHIRT',
+  'SHOES', 'SHORT', 'SKATE', 'SMILE', 'SPACE', 'SPARK', 'SPEED', 'SPORT', 'STONE', 'STORM',
+  'SUGAR', 'TABLE', 'TIGER', 'TOAST', 'TODAY', 'TRAIN', 'TRAIL', 'TRUST', 'UNCLE', 'UNION',
+  'VALUE', 'VIDEO', 'VOICE', 'WATER', 'WHEEL', 'WORLD', 'WRITE', 'YOUTH', 'ZEBRA', 'ALARM',
+  'ALBUM', 'ALERT', 'ANGEL', 'ANIME', 'BASIC', 'BLACK', 'BLOCK', 'BLOOM', 'BOARD', 'BOOST',
+  'BOXER', 'BROWN', 'CANDY', 'CARRY', 'CATCH', 'CHILL', 'CLEAN', 'CLEAR', 'COAST', 'COLOR'
+];
 
 function zenithDateKey(date = new Date()) {
   const timeZone = process.env.ZENITH_TIMEZONE || 'Asia/Colombo';
   const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date);
   const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
   return values.year + '-' + values.month + '-' + values.day;
+}
+
+function shiftZenithDateKey(dateKey, days) {
+  const [year, month, day] = String(dateKey).split('-').map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day + days, 12, 0, 0));
+  return zenithDateKey(utc);
+}
+
+async function refreshDailyStreak(discordUserId, dateKey) {
+  const solvedRows = await database.all(
+    'SELECT date_key FROM daily_game_attempts WHERE discord_user_id = ? AND solved = ? ORDER BY date_key DESC',
+    [discordUserId, true]
+  );
+  const solvedDates = new Set(solvedRows.map((row) => row.date_key));
+  let streak = 0;
+  let cursor = dateKey;
+  while (solvedDates.has(cursor)) {
+    streak += 1;
+    cursor = shiftZenithDateKey(cursor, -1);
+  }
+  await database.run(
+    'UPDATE users SET current_streak = ?, updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?',
+    [streak, discordUserId]
+  );
+  return streak;
 }
 
 async function getDailyGameState(discordUserId, dateKey = zenithDateKey()) {
@@ -786,7 +822,18 @@ function createApp() {
     await database.run(`INSERT INTO daily_game_attempts (date_key, discord_user_id, guesses, solved, guesses_json)
       VALUES (?, ?, ?, ?, ?) ON CONFLICT(date_key, discord_user_id) DO UPDATE SET guesses = excluded.guesses, solved = excluded.solved, guesses_json = excluded.guesses_json`,
       [dateKey, req.session.discordUserId, attempts.length, solved, JSON.stringify(attempts)]);
-    res.json({ solved, result, attemptsRemaining: Math.max(0, 6 - attempts.length), ...(solved ? { answer } : {}) });
+
+    const currentStreak = solved
+      ? await refreshDailyStreak(req.session.discordUserId, dateKey)
+      : Number((await getUser(req.session.discordUserId))?.current_streak || 0);
+
+    res.json({
+      solved,
+      result,
+      attemptsRemaining: Math.max(0, 6 - attempts.length),
+      currentStreak,
+      ...(solved ? { answer } : {}),
+    });
   }));
 
   app.get('/api/admin', requireAuth, requireGuildAdmin, asyncRoute(async (req, res) => {
