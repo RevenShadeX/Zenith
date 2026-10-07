@@ -10,7 +10,7 @@ const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
 const sqlite3 = require('sqlite3').verbose();
-const { isTrackableMessage } = require('../discord-bot');
+const { COMMANDS, isTrackableMessage } = require('../discord-bot');
 const { getDiscordLeaderboard, recordGuildMessage } = require('../discord-activity');
 const { canJoinRoom, isRoomHost } = require('../room-policy');
 
@@ -160,6 +160,43 @@ test('daily game storage persists per-user attempts across database reads', asyn
   assert.equal(Number(saved.guesses), 1);
   assert.equal(Number(saved.solved), 0);
   assert.equal(JSON.parse(saved.guesses_json)[0].guess, 'STONE');
+});
+
+test('Discord commands expose level, leaderboard, and website event management', () => {
+  const names = COMMANDS.map((command) => command.name);
+  assert.deepEqual(names, ['level', 'leaderboard', 'event']);
+  const event = COMMANDS.find((command) => command.name === 'event');
+  assert.deepEqual(event.options.map((option) => option.name), ['add', 'list', 'cancel']);
+  assert.ok(event.options.find((option) => option.name === 'add').options.some((option) => option.name === 'start'));
+});
+
+test('Zenith leveling awards XP only once per cooldown window', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'zenith-levels-'));
+  const database = createDatabase({ sqlitePath: path.join(directory, 'levels.db') });
+  context.after(async () => {
+    await database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  await database.initialize();
+
+  const guildId = '22222222222222222';
+  const userId = '12345678901234567';
+  const makeMessage = (id, date) => ({
+    id,
+    guildId,
+    channelId: '33333333333333333',
+    author: { id: userId, username: 'player', globalName: 'Player', bot: false, displayAvatarURL: () => '' },
+    member: { displayName: 'Player' },
+    createdAt: new Date(date),
+  });
+
+  assert.equal(await recordGuildMessage(database, makeMessage('m1', '2026-10-08T10:00:00.000Z'), guildId), true);
+  assert.equal(await recordGuildMessage(database, makeMessage('m2', '2026-10-08T10:00:30.000Z'), guildId), true);
+  const user = await database.get('SELECT xp, level, points, tracked_message_count FROM users WHERE discord_user_id = ?', [userId]);
+  assert.equal(Number(user.xp), 15);
+  assert.equal(Number(user.level), 1);
+  assert.equal(Number(user.points), 2);
+  assert.equal(Number(user.tracked_message_count), 2);
 });
 
 test('Discord activity accepts only real human messages from the configured guild', () => {
