@@ -10,18 +10,6 @@ const COMMANDS = [
   {
     name: 'leaderboard',
     description: 'Show the Zenith XP leaderboard',
-    options: [{
-      name: 'period',
-      description: 'Leaderboard period',
-      type: ApplicationCommandOptionType.String,
-      required: false,
-      choices: [
-        { name: 'All time', value: 'all_time' },
-        { name: 'This month', value: 'this_month' },
-        { name: 'This week', value: 'this_week' },
-        { name: 'Today', value: 'today' },
-      ],
-    }],
   },
   {
     name: 'event',
