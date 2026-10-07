@@ -91,3 +91,17 @@ Legacy SQLite development databases are migrated by Discord snowflake identity. 
 ## Tests
 
 `npm test` runs Node's built-in test suite for production configuration, media validation, SQLite identity migrations, Discord-message filtering/deduplication, and leaderboard period aggregation. Live Discord OAuth/bot behavior additionally requires valid application credentials and the configured guild permissions.
+
+## Zenith Discord Commands
+
+The bot registers these guild slash commands when it connects:
+
+- `/level` — shows your Zenith level, XP, and tracked messages.
+- `/leaderboard` — shows the Zenith XP leaderboard.
+- `/event add` — creates an event in the same database used by the website calendar.
+- `/event list` — lists upcoming website events.
+- `/event cancel` — removes an upcoming event from the active calendar.
+
+Event creation/cancellation requires Manage Server or Administrator permission. Event times accept an ISO timestamp or `YYYY-MM-DD HH:mm` in `ZENITH_TIMEZONE`.
+
+Zenith's own leveling system is authoritative: eligible tracked messages award 15 XP at most once per 60 seconds per user and 1 point per tracked message. Level progression uses `floor(sqrt(XP / 100)) + 1`. Arcane is not queried or impersonated; an Arcane-backed provider can only be added later if an official server-side API is available.
