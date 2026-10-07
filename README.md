@@ -35,6 +35,7 @@ Set these in the deployment environment, never in frontend code:
 - `DISCORD_BOT_TOKEN`
 - `DISCORD_GUILD_ID`
 - `PG_POOL_MAX` – optional PostgreSQL pool size
+- `ZENITH_TIMEZONE` – timezone used for daily game rollover (defaults to `Asia/Colombo`)
 
 Production startup fails if any required Discord or database value is missing, if the callback is not HTTPS, if the session secret is too short, or if the database URL is not PostgreSQL. The session cookie is Secure, HttpOnly, SameSite=Lax, and sessions are stored in PostgreSQL.
 
