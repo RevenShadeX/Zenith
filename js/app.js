@@ -333,6 +333,7 @@ function renderApp() {
 function readLocation() {
   const [page, roomId] = window.location.hash.replace(/^#/, '').split('/');
   state.page = pages.includes(page) ? page : 'home';
+  if (!roomId && !['watch', 'room-ended'].includes(state.page)) state.roomId = null;
   if (roomId) {
     try {
       state.roomId = decodeURIComponent(roomId);
@@ -510,7 +511,19 @@ function mountWatchPlayer() {
 }
 
 function gameStorageKey() {
-  return `zenith-word-${new Date().toISOString().slice(0, 10)}`;
+  return 'zenith-word-cache';
+}
+
+async function refreshDailyGame() {
+  if (!state.user) return;
+  try {
+    const game = await fetchJson('/api/games/daily-word');
+    state.game = { guesses: Array.isArray(game.attempts) ? game.attempts : [], solved: Boolean(game.solved), answer: game.answer || '' };
+    saveGame();
+    if (state.page === 'games') renderApp();
+  } catch (error) {
+    showToast(error.message, 'error');
+  }
 }
 
 function loadSavedGame() {
@@ -768,6 +781,7 @@ async function loadInitial() {
   }
 
   loadSavedGame();
+  if (state.user) await refreshDailyGame();
   if (state.page === 'watch' && state.roomId && state.user) {
     try {
       await fetchJson(`/api/rooms/${encodeURIComponent(state.roomId)}/join`, { method: 'POST' });
