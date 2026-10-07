@@ -104,6 +104,7 @@ function createDatabase(options = {}) {
         guild_id TEXT NOT NULL,
         tracked_message_count INTEGER NOT NULL DEFAULT 0,
         last_message_at TEXT,
+        last_xp_at TEXT,
         xp INTEGER NOT NULL DEFAULT 0,
         points INTEGER NOT NULL DEFAULT 0,
         level INTEGER NOT NULL DEFAULT 1,
@@ -195,6 +196,9 @@ function createDatabase(options = {}) {
       )`,
     ];
     for (const statement of statements) await run(statement);
+
+    const userColumns = await all('PRAGMA table_info(users)');
+    if (!userColumns.some((column) => column.name === 'last_xp_at')) await run('ALTER TABLE users ADD COLUMN last_xp_at TEXT');
 
     const roomColumns = await all('PRAGMA table_info(rooms)');
     const existingRoomColumns = new Set(roomColumns.map((column) => column.name));
@@ -297,6 +301,7 @@ function createDatabase(options = {}) {
         guild_id TEXT NOT NULL,
         tracked_message_count BIGINT NOT NULL DEFAULT 0,
         last_message_at TIMESTAMPTZ,
+        last_xp_at TIMESTAMPTZ,
         xp INTEGER NOT NULL DEFAULT 0,
         points INTEGER NOT NULL DEFAULT 0,
         level INTEGER NOT NULL DEFAULT 1,
@@ -384,6 +389,7 @@ function createDatabase(options = {}) {
       'CREATE INDEX IF NOT EXISTS idx_discord_events_guild_created ON discord_message_events (guild_id, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_discord_events_author_created ON discord_message_events (author_discord_user_id, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_room_messages_room_created ON room_messages (room_id, created_at)',
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_xp_at TIMESTAMPTZ',
       'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ',
       'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS end_reason TEXT',
     ];
