@@ -32,33 +32,25 @@ async function recordGuildMessage(database, message, guildId) {
   );
   if (!inserted.changes) return false;
 
-  const xpCooldown = await database.get(
-    'SELECT last_xp_at FROM users WHERE discord_user_id = ?',
+  const userState = await database.get(
+    'SELECT xp, last_xp_at FROM users WHERE discord_user_id = ?',
     [discordUserId]
   );
-  const lastXpAt = xpCooldown?.last_xp_at ? new Date(xpCooldown.last_xp_at).getTime() : 0;
+  const lastXpAt = userState?.last_xp_at ? new Date(userState.last_xp_at).getTime() : 0;
   const messageTime = new Date(createdAt).getTime();
   const awardXp = !lastXpAt || messageTime - lastXpAt >= 60_000;
   const xpGain = awardXp ? 15 : 0;
+  const newXp = Number(userState?.xp || 0) + xpGain;
+  const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1;
 
-  if (awardXp) {
-    await database.run(
-      `UPDATE users SET tracked_message_count = tracked_message_count + 1,
-       xp = xp + ?, points = points + 1,
-       level = CAST(FLOOR(SQRT((xp + ?) / 100.0)) + 1 AS INTEGER),
-       last_message_at = CASE WHEN last_message_at IS NULL OR last_message_at < ? THEN ? ELSE last_message_at END,
-       last_xp_at = ?, updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?`,
-      [xpGain, xpGain, createdAt, createdAt, createdAt, discordUserId]
-    );
-  } else {
-    await database.run(
-      `UPDATE users SET tracked_message_count = tracked_message_count + 1,
-       points = points + 1,
-       last_message_at = CASE WHEN last_message_at IS NULL OR last_message_at < ? THEN ? ELSE last_message_at END,
-       updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?`,
-      [createdAt, createdAt, discordUserId]
-    );
-  }
+  await database.run(
+    `UPDATE users SET tracked_message_count = tracked_message_count + 1,
+     xp = ?, level = ?, points = points + 1,
+     last_message_at = CASE WHEN last_message_at IS NULL OR last_message_at < ? THEN ? ELSE last_message_at END,
+     last_xp_at = CASE WHEN ? > 0 THEN ? ELSE last_xp_at END,
+     updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?`,
+    [newXp, newLevel, createdAt, createdAt, xpGain, createdAt, discordUserId]
+  );
   return true;
 }
 
