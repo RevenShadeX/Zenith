@@ -1,0 +1,37 @@
+{
+  "name": "zenith-community-platform",
+  "version": "1.0.0",
+  "description": "Zenith community platform with authentication, chat, rooms, games, and status monitoring.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node --test"
+  },
+  "keywords": [
+    "zenith",
+    "community",
+    "discord",
+    "express",
+    "websocket"
+  ],
+  "author": "Zenith",
+  "license": "MIT",
+  "dependencies": {
+    "connect-pg-simple": "^10.0.0",
+    "discord.js": "^14.27.0",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.7.1",
+    "express-session": "^1.18.0",
+    "helmet": "^8.3.0",
+    "pg": "^8.23.1",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "sqlite3": "^6.0.1"
+  }
+}
