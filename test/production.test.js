@@ -133,6 +133,35 @@ test('legacy SQLite migration preserves real Discord snowflakes and drops seeded
   assert.equal((await database.all('SELECT * FROM event_participants')).length, 1);
 });
 
+test('daily game storage persists per-user attempts across database reads', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'zenith-daily-game-'));
+  const database = createDatabase({ sqlitePath: path.join(directory, 'daily.db') });
+  context.after(async () => {
+    await database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  await database.initialize();
+
+  const userId = '12345678901234567';
+  await database.run(
+    'INSERT INTO users (discord_user_id, username, display_name, avatar, guild_id) VALUES (?, ?, ?, ?, ?)',
+    [userId, 'player', 'Player', '', '22222222222222222']
+  );
+  await database.run('INSERT INTO daily_words (date_key, word) VALUES (?, ?)', ['2026-10-08', 'PLANT']);
+  await database.run(
+    'INSERT INTO daily_game_attempts (date_key, discord_user_id, guesses, solved, guesses_json) VALUES (?, ?, ?, ?, ?)',
+    ['2026-10-08', userId, 1, 0, JSON.stringify([{ guess: 'STONE', result: ['gray', 'gray', 'green', 'gray', 'gray'] }])]
+  );
+
+  const saved = await database.get(
+    'SELECT guesses, solved, guesses_json FROM daily_game_attempts WHERE date_key = ? AND discord_user_id = ?',
+    ['2026-10-08', userId]
+  );
+  assert.equal(Number(saved.guesses), 1);
+  assert.equal(Number(saved.solved), 0);
+  assert.equal(JSON.parse(saved.guesses_json)[0].guess, 'STONE');
+});
+
 test('Discord activity accepts only real human messages from the configured guild', () => {
   const message = {
     id: 'message-id',
