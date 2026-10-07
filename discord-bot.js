@@ -103,7 +103,7 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
     if (!interaction.isChatInputCommand()) return;
     Promise.resolve((async () => {
       if (interaction.commandName === 'level') {
-        const data = await onLevel?.(interaction.user.id);
+        const data = await onLevel?.(interaction.user.id, interaction.user);
         if (!data) return interaction.reply({ content: 'Level data is unavailable right now.', ephemeral: true });
         return interaction.reply({
           content: `**${data.displayName}** — Level **${data.level}** · ${data.xp.toLocaleString()} XP · ${data.messages.toLocaleString()} messages`,
