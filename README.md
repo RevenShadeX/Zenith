@@ -43,7 +43,7 @@ Production startup fails if any required Discord or database value is missing, i
 
 1. Create a Discord application and configure the OAuth redirect URI to match `DISCORD_REDIRECT_URI` exactly.
 2. Enable the `Guild Members` privileged gateway intent for the bot. Zenith does not request message content; it only needs guild message events to count messages.
-3. Invite the bot to the configured guild with access to the channels whose messages should be counted. Grant View Channel and Read Message History only where needed. The bot does not need to send messages.
+3. Invite the bot to the configured guild with access to the channels whose messages should be counted. Grant View Channel and Read Message History where needed for activity tracking. Slash commands also require members to have permission to use application commands in the channel.
 4. Use the OAuth scopes `identify` and `guilds.members.read`. The callback verifies the Discord identity and membership in `DISCORD_GUILD_ID` before creating a session.
 5. Keep `DISCORD_BOT_TOKEN` server-side. It is never included in HTML or API responses.
 
