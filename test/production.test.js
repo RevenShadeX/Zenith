@@ -199,6 +199,38 @@ test('Zenith leveling awards XP only once per cooldown window', async (context) 
   assert.equal(Number(user.tracked_message_count), 2);
 });
 
+
+test('Zenith leveling cannot double-award XP when messages arrive concurrently', async (context) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'zenith-level-race-'));
+  const database = createDatabase({ sqlitePath: path.join(directory, 'levels.db') });
+  context.after(async () => {
+    await database.close();
+    await fs.rm(directory, { recursive: true, force: true });
+  });
+  await database.initialize();
+
+  const guildId = '22222222222222222';
+  const userId = '12345678901234567';
+  const makeMessage = (id) => ({
+    id,
+    guildId,
+    channelId: '33333333333333333',
+    author: { id: userId, username: 'player', globalName: 'Player', bot: false, displayAvatarURL: () => '' },
+    member: { displayName: 'Player' },
+    createdAt: new Date('2026-10-08T10:00:00.000Z'),
+  });
+
+  const results = await Promise.all([
+    recordGuildMessage(database, makeMessage('race-1'), guildId),
+    recordGuildMessage(database, makeMessage('race-2'), guildId),
+  ]);
+  assert.deepEqual(results, [true, true]);
+  const user = await database.get('SELECT xp, points, tracked_message_count FROM users WHERE discord_user_id = ?', [userId]);
+  assert.equal(Number(user.xp), 15);
+  assert.equal(Number(user.points), 2);
+  assert.equal(Number(user.tracked_message_count), 2);
+});
+
 test('Discord activity accepts only real human messages from the configured guild', () => {
   const message = {
     id: 'message-id',
