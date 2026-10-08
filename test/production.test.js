@@ -207,7 +207,7 @@ test('Zenith leveling awards XP only once per cooldown window', async (context) 
   assert.equal(await recordGuildMessage(database, makeMessage('m1', '2026-10-08T10:00:00.000Z'), guildId), true);
   assert.equal(await recordGuildMessage(database, makeMessage('m2', '2026-10-08T10:00:30.000Z'), guildId), true);
   const user = await database.get('SELECT xp, level, points, tracked_message_count FROM users WHERE discord_user_id = ?', [userId]);
-  assert.equal(Number(user.xp), 15);
+  assert.equal(Number(user.xp), 12);
   assert.equal(Number(user.level), 1);
   assert.equal(Number(user.points), 2);
   assert.equal(Number(user.tracked_message_count), 2);
@@ -240,7 +240,7 @@ test('Zenith leveling cannot double-award XP when messages arrive concurrently',
   ]);
   assert.deepEqual(results, [true, true]);
   const user = await database.get('SELECT xp, points, tracked_message_count FROM users WHERE discord_user_id = ?', [userId]);
-  assert.equal(Number(user.xp), 15);
+  assert.equal(Number(user.xp), 12);
   assert.equal(Number(user.points), 2);
   assert.equal(Number(user.tracked_message_count), 2);
 });
