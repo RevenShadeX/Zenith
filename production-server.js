@@ -769,6 +769,9 @@ function createApp() {
   }));
 
   app.post('/api/rooms', requireSameOrigin, requireAuth, asyncRoute(async (req, res) => {
+    if (!discordBot?.isGuildOwner || !(await discordBot.isGuildOwner(req.session.discordUserId))) {
+      return res.status(403).json({ error: 'Only the Discord server owner can create watch rooms.' });
+    }
     const name = sanitizeText(req.body?.name, 80);
     if (!name) return res.status(400).json({ error: 'Room name is required.' });
     let media;
