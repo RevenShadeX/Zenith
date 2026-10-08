@@ -257,7 +257,7 @@ function renderWatch() {
   return `
     <section class="page-section watch-heading"><div><button class="back-link" type="button" data-page="rooms">← All rooms</button><div class="watch-room-title"><span class="eyebrow"><span class="status-dot"></span> LIVE WATCH PARTY</span><h1>${escapeHtml(room.name)}</h1><span>Hosted by ${escapeHtml(getHostLabel(room))}</span></div><div class="watch-presence"><span id="viewerCount">${Number(room.viewer_count || 0)} watching</span><span id="activeMembers">${activeUsers || 'Waiting for people to join'}</span></div></div><button class="button button-quiet" type="button" data-action="leave-room">Leave room</button></section>
     <section class="watch-layout">
-      <div class="watch-main"><div class="video-frame"><div id="watchPlayer" class="watch-player"></div><button id="playbackHint" class="playback-hint is-hidden" type="button" data-action="enable-playback">Tap to join playback</button><span class="video-live"><span class="status-dot"></span>HOST-SYNCED</span></div><div class="watch-details"><div><span class="eyebrow">ROOM DETAILS</span><h2>${escapeHtml(room.name)}</h2></div><div class="watch-host"><img class="avatar" src="${escapeHtml(room.host_avatar || state.leaderboard.find((user) => user.id === room.host_user_id)?.avatar || '')}" alt="" /><span>Hosted by<strong>${escapeHtml(getHostLabel(room))}</strong></span></div><span id="roomLockStatus" class="room-lock-state">${room.locked ? 'Locked to new viewers' : 'Open to the community'}</span></div>
+      <div class="watch-main"><div class="video-frame" id="videoFrame"><div id="watchPlayer" class="watch-player"></div><button id="playbackHint" class="playback-hint is-hidden" type="button" data-action="enable-playback">Tap to join playback</button><div class="player-tools"><button class="button button-small button-glass" type="button" data-action="toggle-player-fullscreen">Fullscreen</button><button class="button button-small button-glass" type="button" data-action="toggle-fullscreen-chat">Chat</button></div><div class="chat-toasts" id="chatToasts" aria-live="polite"></div><div class="fullscreen-chat is-hidden" id="fullscreenChat"><header><strong>Room chat</strong><button class="button button-small button-glass" type="button" data-action="toggle-fullscreen-chat" aria-label="Close chat">×</button></header><div class="chat-messages" id="fullscreenChatMessages" aria-live="polite">${messages.length ? messages.map(renderChatMessage).join('') : '<div class="chat-empty">No messages yet.</div>'}</div>${state.user ? '<form id="fullscreenChatForm" class="chat-form"><input name="text" maxlength="240" autocomplete="off" placeholder="Write a message…" aria-label="Chat message" required /><button class="button button-primary button-icon" type="submit" aria-label="Send message">↑</button></form>' : ''}</div><span class="video-live"><span class="status-dot"></span>HOST-SYNCED</span></div><div class="watch-details"><div><span class="eyebrow">ROOM DETAILS</span><h2>${escapeHtml(room.name)}</h2></div><div class="watch-host"><img class="avatar" src="${escapeHtml(room.host_avatar || state.leaderboard.find((user) => user.id === room.host_user_id)?.avatar || '')}" alt="" /><span>Hosted by<strong>${escapeHtml(getHostLabel(room))}</strong></span></div><span id="roomLockStatus" class="room-lock-state">${room.locked ? 'Locked to new viewers' : 'Open to the community'}</span></div>
         ${isHost ? `<section class="host-controls"><div><span class="eyebrow">HOST CONTROLS</span><p>Changes sync to everyone in this room.</p></div><form id="mediaForm" class="host-media-form"><label for="mediaUrlInput">Change media source</label><div><input id="mediaUrlInput" name="mediaUrl" type="url" value="${escapeHtml(room.media_url)}" required /><button class="button button-small button-outline" type="submit">Update source</button></div></form><button class="button button-small button-outline" type="button" data-action="toggle-room-lock" data-locked="${room.locked ? 'true' : 'false'}">${room.locked ? 'Unlock room' : 'Lock room'}</button><button class="button button-small button-danger" type="button" data-action="end-room">End room</button></section>` : ''}
       </div>
       <aside class="chat-panel"><header class="chat-header"><div><span class="eyebrow">ROOM CHAT</span><h2>Say hello</h2></div><span class="chat-live"><span class="status-dot"></span><span id="chatConnection">CONNECTING</span></span></header><div class="chat-messages" id="chatMessages" aria-live="polite">${messages.length ? messages.map(renderChatMessage).join('') : '<div class="chat-empty">First one here? Break the ice.</div>'}</div>${state.user ? `<form id="chatForm" class="chat-form"><input name="text" maxlength="240" autocomplete="off" placeholder="Write a message…" aria-label="Chat message" required /><button class="button button-primary button-icon" type="submit" aria-label="Send message">↑</button></form>` : signInPrompt('Sign in to join the conversation', 'chat-sign-in')}</aside>
@@ -332,10 +332,11 @@ function parseLocalDateTime(value) {
 }
 
 function renderEvents() {
+  const canManageEvents = Boolean(state.user?.admin);
   return `
-    <section class="page-section page-heading"><span class="eyebrow">PUT IT ON THE CALENDAR</span><div class="heading-row"><div><h1>Plans worth keeping.</h1><p>Movie nights, game sessions, and whatever the community dreams up.</p></div><button class="button button-primary" type="button" data-action="toggle-event-form">Host an event <span aria-hidden="true">＋</span></button></div></section>
-    <section class="event-create-wrap is-hidden" id="eventCreateWrap">${state.user ? `<form id="createEventForm" class="form-grid event-form"><label>Event title<input name="title" maxlength="100" placeholder="Late-night double feature" required /></label><label>Type<select name="type"><option>COMMUNITY EVENT</option><option>MOVIE NIGHT</option><option>MUSIC NIGHT</option><option>GAME NIGHT</option></select></label><label class="form-wide">A little context<textarea name="description" maxlength="240" rows="2" placeholder="What should people know?"></textarea></label><label>Starts<input name="startTime" type="datetime-local" min="${getLocalDateTimeInputMin()}" step="60" required /></label><button class="button button-primary" type="submit">Publish event ↗</button></form>` : signInPrompt('Sign in to host an event')}</section>
-    <section class="events-list">${state.events.length ? state.events.map(renderEventCard).join('') : '<div class="empty-state">No plans on the calendar yet. Host the first one.</div>'}</section>
+    <section class="page-section page-heading"><span class="eyebrow">PUT IT ON THE CALENDAR</span><div class="heading-row"><div><h1>Plans worth keeping.</h1><p>Movie nights, game sessions, and whatever the community dreams up.</p></div>${canManageEvents ? '<button class="button button-primary" type="button" data-action="toggle-event-form">Host an event <span aria-hidden="true">＋</span></button>' : ''}</div></section>
+    ${canManageEvents ? `<section class="event-create-wrap is-hidden" id="eventCreateWrap"><form id="createEventForm" class="form-grid event-form"><label>Event title<input name="title" maxlength="100" placeholder="Late-night double feature" required /></label><label>Type<select name="type"><option>COMMUNITY EVENT</option><option>MOVIE NIGHT</option><option>MUSIC NIGHT</option><option>GAME NIGHT</option></select></label><label class="form-wide">A little context<textarea name="description" maxlength="240" rows="2" placeholder="What should people know?"></textarea></label><label>Starts<input name="startTime" type="datetime-local" min="${getLocalDateTimeInputMin()}" step="60" required /></label><label>Ends<input name="endTime" type="datetime-local" min="${getLocalDateTimeInputMin()}" step="60" required /></label><button class="button button-primary" type="submit">Publish event ↗</button></form></section>` : ''}
+    <section class="events-list">${state.events.length ? state.events.map(renderEventCard).join('') : '<div class="empty-state">No plans on the calendar yet.</div>'}</section>
   `;
 }
 function renderStatusPage() {
@@ -405,13 +406,28 @@ async function applyRoomSnapshot(message) {
 
 function appendChatMessage(message) {
   state.messages.push(message);
-  const chat = document.querySelector('#chatMessages');
-  if (!chat) return;
-  chat.querySelector('.chat-empty')?.remove();
-  const wrapper = document.createElement('div');
-  wrapper.innerHTML = renderChatMessage(message);
-  if (wrapper.firstElementChild) chat.append(wrapper.firstElementChild);
-  chat.scrollTop = chat.scrollHeight;
+  const html = renderChatMessage(message);
+  for (const selector of ['#chatMessages', '#fullscreenChatMessages']) {
+    const chat = document.querySelector(selector);
+    if (!chat) continue;
+    chat.querySelector('.chat-empty')?.remove();
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+    if (wrapper.firstElementChild) chat.append(wrapper.firstElementChild);
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  const toastStack = document.querySelector('#chatToasts');
+  if (toastStack) {
+    const toast = document.createElement('div');
+    toast.className = 'chat-toast';
+    toast.innerHTML = html;
+    toastStack.append(toast);
+    window.setTimeout(() => {
+      toast.classList.add('is-fading');
+      window.setTimeout(() => toast.remove(), 350);
+    }, 4200);
+  }
 }
 
 async function handleRoomSocketMessage(event, roomId) {
@@ -609,9 +625,21 @@ async function handleClick(event) {
     document.querySelector('#createRoomSection')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     document.querySelector('#createRoomForm [name="name"]')?.focus();
   } else if (action === 'toggle-event-form') {
+    if (!state.user?.admin) return;
     const form = document.querySelector('#eventCreateWrap');
     form?.classList.toggle('is-hidden');
     if (form && !form.classList.contains('is-hidden')) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } else if (action === 'toggle-player-fullscreen') {
+    const playerFrame = document.querySelector('#videoFrame');
+    if (!playerFrame) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await playerFrame.requestFullscreen();
+    } catch {
+      showToast('Fullscreen is not available in this browser.', 'error');
+    }
+  } else if (action === 'toggle-fullscreen-chat') {
+    document.querySelector('#fullscreenChat')?.classList.toggle('is-hidden');
   } else if (action === 'watch-room') {
     if (!state.user) {
       startDiscordLogin();
@@ -748,10 +776,13 @@ async function handleSubmit(event) {
       else if (state.game.guesses.length >= 6) showToast('That was the last try. New puzzle tomorrow.', 'info');
       else document.querySelector('#guessInput')?.focus();
     } else if (form.id === 'createEventForm') {
+      if (!state.user?.admin) throw new Error('Only server administrators can create events.');
       const data = new FormData(form);
       const startTime = parseLocalDateTime(data.get('startTime'));
-      if (!startTime) throw new Error('Choose a valid start date and time.');
-      if (startTime.getTime() <= Date.now()) throw new Error('Choose a future date and time.');
+      const endTime = parseLocalDateTime(data.get('endTime'));
+      if (!startTime || !endTime) throw new Error('Choose a valid start and end date/time.');
+      if (startTime.getTime() <= Date.now()) throw new Error('Choose a future start time.');
+      if (endTime <= startTime) throw new Error('End time must be after the start time.');
       const { event: created } = await fetchJson('/api/events', {
         method: 'POST',
         body: JSON.stringify({
@@ -759,7 +790,7 @@ async function handleSubmit(event) {
           type: data.get('type'),
           description: data.get('description'),
           startTime: startTime.toISOString(),
-          endTime: new Date(startTime.getTime() + 60 * 60 * 1000).toISOString(),
+          endTime: endTime.toISOString(),
         }),
       });
       state.events.push(created);
