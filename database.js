@@ -244,6 +244,7 @@ function createDatabase(options = {}) {
       )`,
     ];
     for (const statement of statements) await run(statement);
+    await run('INSERT OR IGNORE INTO season_badges (badge_id, discord_user_id, season_key, unlocked_at) SELECT badge_id, discord_user_id, ?, unlocked_at FROM user_badges', [getSeasonKey()]);
 
     const userColumns = await all('PRAGMA table_info(users)');
     const existingUserColumns = new Set(userColumns.map((column) => column.name));
@@ -514,6 +515,7 @@ function createDatabase(options = {}) {
         await run(statement);
       }
     }
+    await run('INSERT INTO season_badges (badge_id, discord_user_id, season_key, unlocked_at) SELECT badge_id, discord_user_id, ?, unlocked_at FROM user_badges ON CONFLICT DO NOTHING', [getSeasonKey()]);
 
     await run("DELETE FROM room_messages WHERE discord_user_id = 'demo-user'");
     await run("DELETE FROM room_members WHERE discord_user_id = 'demo-user'");
