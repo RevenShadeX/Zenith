@@ -6,12 +6,14 @@ const DAILY_MISSIONS = [
   { id: 'daily_messages_10', period: 'daily', title: 'Say hello', description: 'Send 10 messages in the Discord server.', target: 10, metric: 'messages', xp: 50, points: 25 },
   { id: 'daily_game_1', period: 'daily', title: 'Solve today\'s puzzle', description: 'Complete the Zenith daily word game.', target: 1, metric: 'game_wins', xp: 50, points: 25 },
   { id: 'daily_event_1', period: 'daily', title: 'Show up', description: 'Join a community event today.', target: 1, metric: 'event_joins', xp: 50, points: 25 },
+  { id: 'daily_invites_1', period: 'daily', title: 'Bring a friend', description: 'Invite 1 new member to the Discord server.', target: 1, metric: 'invites', xp: 75, points: 35 },
 ];
 
 const WEEKLY_MISSIONS = [
   { id: 'weekly_messages_100', period: 'weekly', title: 'Keep the server alive', description: 'Send 100 messages this week.', target: 100, metric: 'messages', xp: 200, points: 100 },
   { id: 'weekly_games_3', period: 'weekly', title: 'Puzzle regular', description: 'Solve 3 daily word games this week.', target: 3, metric: 'game_wins', xp: 250, points: 100 },
   { id: 'weekly_events_2', period: 'weekly', title: 'Be there', description: 'Join 2 community events this week.', target: 2, metric: 'event_joins', xp: 200, points: 100 },
+  { id: 'weekly_invites_3', period: 'weekly', title: 'Grow the crew', description: 'Invite 3 new members to the Discord server this week.', target: 3, metric: 'invites', xp: 300, points: 150 },
 ];
 
 function localDateParts(date, timeZone) {
@@ -82,6 +84,14 @@ async function getMetricProgress(database, userId, mission, now = new Date()) {
     return Number(row?.count || 0);
   }
 
+  if (mission.metric === 'invites') {
+    const row = await database.get(
+      'SELECT COUNT(*) AS count FROM discord_invite_uses WHERE inviter_discord_user_id = ? AND joined_at >= ? AND joined_at < ?',
+      [userId, start, end]
+    );
+    return Number(row?.count || 0);
+  }
+
   if (mission.metric === 'event_joins') {
     const query = database.isPostgres
       ? 'SELECT COUNT(*) AS count FROM event_participants WHERE discord_user_id = ? AND joined_at >= ? AND joined_at < ?'
@@ -93,6 +103,74 @@ async function getMetricProgress(database, userId, mission, now = new Date()) {
   return 0;
 }
 
+async function getCommunityMissionState(database, now = new Date(), guildId = process.env.DISCORD_GUILD_ID || 'unconfigured') {
+  const users = await database.all(
+    'SELECT discord_user_id, username, display_name, avatar FROM users WHERE guild_id = ? ORDER BY display_name ASC',
+    [guildId]
+  );
+  const missions = [...DAILY_MISSIONS, ...WEEKLY_MISSIONS];
+  const claims = users.length
+    ? await database.all(
+      'SELECT mission_id, discord_user_id, period_key FROM mission_claims WHERE discord_user_id IN (' + users.map(() => '?').join(',') + ')',
+      users.map((user) => user.discord_user_id)
+    )
+    : [];
+  const claimed = new Set(claims.map((claim) => missionClaimKey(claim.mission_id, claim.discord_user_id, claim.period_key)));
+
+  const memberStates = await Promise.all(users.map(async (user) => {
+    await ensureUserSeason(database, user.discord_user_id, now);
+    const missionsForUser = {};
+    for (const mission of missions) {
+      const bounds = periodBounds(mission.period, now);
+      const progress = Math.min(mission.target, await getMetricProgress(database, user.discord_user_id, mission, now));
+      missionsForUser[mission.id] = {
+        progress,
+        completed: progress >= mission.target,
+        claimed: claimed.has(missionClaimKey(mission.id, user.discord_user_id, bounds.key)),
+      };
+    }
+    return {
+      id: user.discord_user_id,
+      username: user.username,
+      displayName: user.display_name || user.username,
+      avatar: user.avatar || '',
+      missions: missionsForUser,
+    };
+  }));
+
+  return {
+    timezone: process.env.ZENITH_TIMEZONE || 'Asia/Colombo',
+    daily: DAILY_MISSIONS.map((mission) => {
+      const bounds = periodBounds(mission.period, now);
+      return {
+        ...mission,
+        periodKey: bounds.key,
+        members: memberStates.map((member) => ({
+          id: member.id,
+          username: member.username,
+          displayName: member.displayName,
+          avatar: member.avatar,
+          ...member.missions[mission.id],
+        })),
+      };
+    }),
+    weekly: WEEKLY_MISSIONS.map((mission) => {
+      const bounds = periodBounds(mission.period, now);
+      return {
+        ...mission,
+        periodKey: bounds.key,
+        members: memberStates.map((member) => ({
+          id: member.id,
+          username: member.username,
+          displayName: member.displayName,
+          avatar: member.avatar,
+          ...member.missions[mission.id],
+        })),
+      };
+    }),
+  };
+}
+
 async function getMissionState(database, userId, now = new Date()) {
   await ensureUserSeason(database, userId, now);
   const missions = [...DAILY_MISSIONS, ...WEEKLY_MISSIONS];
@@ -100,7 +178,7 @@ async function getMissionState(database, userId, now = new Date()) {
     'SELECT mission_id, period_key FROM mission_claims WHERE discord_user_id = ?',
     [userId]
   );
-  const claimed = new Set(claims.map((claim) => missionClaimKey(claim.mission_id, claim.period_key)));
+  const claimed = new Set(claims.map((claim) => missionClaimKey(claim.mission_id, userId, claim.period_key)));
   const result = [];
 
   for (const mission of missions) {
@@ -111,7 +189,7 @@ async function getMissionState(database, userId, now = new Date()) {
       periodKey: bounds.key,
       progress,
       completed: progress >= mission.target,
-      claimed: claimed.has(missionClaimKey(mission.id, bounds.key)),
+      claimed: claimed.has(missionClaimKey(mission.id, userId, bounds.key)),
     });
   }
 
@@ -122,8 +200,8 @@ async function getMissionState(database, userId, now = new Date()) {
   };
 }
 
-function missionClaimKey(missionId, periodKey) {
-  return missionId + ':' + periodKey;
+function missionClaimKey(missionId, userId, periodKey) {
+  return missionId + ':' + String(userId || '') + ':' + periodKey;
 }
 
 async function claimMission(database, userId, missionId, periodKey) {
@@ -156,4 +234,4 @@ async function claimMission(database, userId, missionId, periodKey) {
   return { mission, xp: newXp, level: newLevel, points: mission.points };
 }
 
-module.exports = { DAILY_MISSIONS, WEEKLY_MISSIONS, claimMission, getMissionState };
+module.exports = { DAILY_MISSIONS, WEEKLY_MISSIONS, claimMission, getMissionState, getCommunityMissionState };
