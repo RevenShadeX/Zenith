@@ -23,8 +23,8 @@ function getSeasonBounds(date = new Date()) {
     month: '2-digit',
   }).formatToParts(date);
   const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
-  const candidate = new Date(Date.UTC(values.year, values.month - 1, 1, 12, 0, 0));
-  const localParts = new Intl.DateTimeFormat('en-US', {
+  const startCandidate = new Date(Date.UTC(values.year, values.month - 1, 1, 0, 0, 0));
+  const startParts = new Intl.DateTimeFormat('en-US', {
     timeZone,
     year: 'numeric',
     month: '2-digit',
@@ -32,14 +32,15 @@ function getSeasonBounds(date = new Date()) {
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23',
-  }).formatToParts(candidate);
-  const localValues = Object.fromEntries(localParts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
-  const zoneAsUtc = Date.UTC(localValues.year, localValues.month - 1, localValues.day, localValues.hour);
-  const start = new Date(candidate.getTime() - (zoneAsUtc - candidate.getTime()));
+  }).formatToParts(startCandidate);
+  const startValues = Object.fromEntries(startParts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+  const startAsUtc = Date.UTC(startValues.year, startValues.month - 1, startValues.day, startValues.hour, startValues.minute);
+  const start = new Date(startCandidate.getTime() - (startAsUtc - startCandidate.getTime()));
+
   const nextYear = values.month === 12 ? values.year + 1 : values.year;
   const nextMonth = values.month === 12 ? 1 : values.month + 1;
-  const nextCandidate = new Date(Date.UTC(nextYear, nextMonth - 1, 1, 12, 0, 0));
-  const nextLocalParts = new Intl.DateTimeFormat('en-US', {
+  const endCandidate = new Date(Date.UTC(nextYear, nextMonth - 1, 1, 0, 0, 0));
+  const endParts = new Intl.DateTimeFormat('en-US', {
     timeZone,
     year: 'numeric',
     month: '2-digit',
@@ -47,13 +48,13 @@ function getSeasonBounds(date = new Date()) {
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23',
-  }).formatToParts(nextCandidate);
-  const nextLocalValues = Object.fromEntries(nextLocalParts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
-  const nextZoneAsUtc = Date.UTC(nextLocalValues.year, nextLocalValues.month - 1, nextLocalValues.day, nextLocalValues.hour);
-  const end = new Date(nextCandidate.getTime() - (nextZoneAsUtc - nextCandidate.getTime()));
+  }).formatToParts(endCandidate);
+  const endValues = Object.fromEntries(endParts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+  const endAsUtc = Date.UTC(endValues.year, endValues.month - 1, endValues.day, endValues.hour, endValues.minute);
+  const end = new Date(endCandidate.getTime() - (endAsUtc - endCandidate.getTime()));
+
   return { start, end };
 }
-
 async function ensureUserSeason(database, discordUserId, now = new Date()) {
   const id = String(discordUserId);
   const seasonKey = getSeasonKey(now);
