@@ -171,22 +171,22 @@ function renderMissions(compact = false) {
   const cards = groups.flatMap(([label, missions]) => missions.map((mission) => {
     const percent = Math.min(100, Math.round((mission.progress / mission.target) * 100));
     const action = mission.completed && !mission.claimed
-      ? \`<button class="button button-small button-primary" type="button" data-action="claim-mission" data-mission-id="\${escapeHtml(mission.id)}" data-period-key="\${escapeHtml(mission.periodKey)}">Claim +\${Number(mission.xp).toLocaleString()} XP</button>\`
+      ? `<button class="button button-small button-primary" type="button" data-action="claim-mission" data-mission-id="${escapeHtml(mission.id)}" data-period-key="${escapeHtml(mission.periodKey)}">Claim +${Number(mission.xp).toLocaleString()} XP</button>`
       : mission.claimed
         ? '<span class="mission-claimed">CLAIMED</span>'
         : '';
-    return \`<article class="mission-card \${mission.claimed ? 'is-claimed' : ''}">
-      <div class="mission-card-top"><span class="eyebrow">\${label}</span><strong>\${Number(mission.progress).toLocaleString()} / \${Number(mission.target).toLocaleString()}</strong></div>
-      <h3>\${escapeHtml(mission.title)}</h3>
-      <p>\${escapeHtml(mission.description)}</p>
-      <div class="mission-progress"><span style="width:\${percent}%"></span></div>
-      <div class="mission-footer"><span>+\${Number(mission.xp).toLocaleString()} XP · +\${Number(mission.points).toLocaleString()} points</span>\${action}</div>
-    </article>\`;
+    return `<article class="mission-card ${mission.claimed ? 'is-claimed' : ''}">
+      <div class="mission-card-top"><span class="eyebrow">${label}</span><strong>${Number(mission.progress).toLocaleString()} / ${Number(mission.target).toLocaleString()}</strong></div>
+      <h3>${escapeHtml(mission.title)}</h3>
+      <p>${escapeHtml(mission.description)}</p>
+      <div class="mission-progress"><span style="width:${percent}%"></span></div>
+      <div class="mission-footer"><span>+${Number(mission.xp).toLocaleString()} XP · +${Number(mission.points).toLocaleString()} points</span>${action}</div>
+    </article>`;
   })).join('');
-  return \`<section class="missions-section \${compact ? 'missions-compact' : ''}">
+  return `<section class="missions-section ${compact ? 'missions-compact' : ''}">
     <div class="section-header"><div><span class="eyebrow">KEEP THE COMMUNITY MOVING</span><h2>Daily & weekly missions</h2></div><span class="mission-reset">Daily resets each day · Weekly resets Monday</span></div>
-    <div class="missions-grid">\${cards}</div>
-  </section>\`;
+    <div class="missions-grid">${cards}</div>
+  </section>`;
 }
 
 async function refreshMissions() {
@@ -661,7 +661,7 @@ async function handleClick(event) {
   if (action === 'claim-mission') {
     control.disabled = true;
     try {
-      const { user, missions } = await fetchJson(\`/api/missions/\${encodeURIComponent(control.dataset.missionId)}/claim\`, {
+      const { user, missions } = await fetchJson(`/api/missions/${encodeURIComponent(control.dataset.missionId)}/claim`, {
         method: 'POST',
         body: JSON.stringify({ periodKey: control.dataset.periodKey }),
       });
