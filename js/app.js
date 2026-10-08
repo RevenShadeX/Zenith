@@ -25,6 +25,7 @@ const state = {
   mediaProvider: null,
   activeUsers: [],
   missions: null,
+  communityMissions: null,
   seasonHistory: [],
   studyRefreshTimer: null,
 };
@@ -112,7 +113,7 @@ function navigate(page, roomId = null) {
   renderTopbar();
   renderApp();
   if (state.page === 'watch' && state.roomId && state.user) connectRoomSocket(state.roomId);
-  if (state.page === 'community') refreshLeaderboard(state.leaderboardPeriod);
+  if (state.page === 'community') { refreshLeaderboard(state.leaderboardPeriod); refreshCommunityMissions(); }
   if (state.page === 'events') refreshEvents();
 }
 
@@ -193,6 +194,33 @@ function renderMissions(compact = false) {
   </section>`;
 }
 
+async function refreshCommunityMissions() {
+  if (!state.user) {
+    state.communityMissions = null;
+    return;
+  }
+  try {
+    state.communityMissions = await fetchJson('/api/missions/community');
+    if (state.page === 'community') renderApp();
+  } catch {
+    state.communityMissions = null;
+  }
+}
+
+function renderCommunityMissions() {
+  if (!state.user || !state.communityMissions) return '';
+  const groups = [['DAILY', state.communityMissions.daily || []], ['WEEKLY', state.communityMissions.weekly || []]];
+  const cards = groups.flatMap(([label, missions]) => missions.map((mission) => {
+    const members = mission.members || [];
+    const rows = members.length ? members.map((member) => {
+      const percent = Math.min(100, Math.round((Number(member.progress || 0) / Number(mission.target || 1)) * 100));
+      const status = member.claimed ? '<span class="mission-member-status">CLAIMED</span>' : member.completed ? '<span class="mission-member-status is-complete">COMPLETE</span>' : `<span class="mission-member-progress">${Number(member.progress || 0).toLocaleString()} / ${Number(mission.target || 0).toLocaleString()}</span>`;
+      return `<div class="mission-member"><img class="avatar mission-member-avatar" src="${escapeHtml(member.avatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=member')}" alt="" /><div class="mission-member-main"><div class="mission-member-head"><strong>${escapeHtml(member.displayName || member.username || 'Member')}</strong>${member.id === state.user?.id ? '<small>YOU</small>' : ''}</div><div class="mission-member-progressbar"><span style="width:${percent}%"></span></div></div>${status}</div>`;
+    }).join('') : '<div class="empty-state">No members have joined yet.</div>';
+    return `<article class="community-mission-card"><div class="mission-card-top"><span class="eyebrow">${label}</span><span class="mission-reward">+${Number(mission.xp).toLocaleString()} XP · +${Number(mission.points).toLocaleString()} pts</span></div><h3>${escapeHtml(mission.title)}</h3><p>${escapeHtml(mission.description)}</p><div class="mission-members">${rows}</div></article>`;
+  })).join('');
+  return `<section class="missions-section community-missions-section"><div class="section-header"><div><span class="eyebrow">VISIBLE TO THE WHOLE COMMUNITY</span><h2>Everyone’s missions</h2></div><span class="mission-reset">Same daily & weekly tasks for every member</span></div><div class="community-missions-grid">${cards}</div></section>`;
+}
 async function refreshMissions() {
   if (!state.user) {
     state.missions = null;
@@ -358,6 +386,7 @@ function renderCommunity() {
     : 'Waiting for the bot to connect';
   return `
     <section class="page-section page-heading"><span class="eyebrow">ACTIVITY FROM YOUR DISCORD SERVER</span><div class="heading-row"><div><h1>Most active</h1><p>Monthly competition. XP, points, and badges reset at the start of each month.</p></div><div class="community-total"><strong>${users.length.toString().padStart(2, '0')}</strong><span>MEMBERS<br />IN THIS PERIOD</span></div></div></section>
+    ${renderCommunityMissions()}
     ${state.user ? `<section class="profile-summary"><img class="profile-avatar" src="${escapeHtml(state.user.avatar)}" alt="" /><div class="profile-identity"><span class="eyebrow">YOUR DISCORD PROFILE</span><h2>${escapeHtml(state.user.displayName || state.user.username)}</h2><span>Discord member · ${Number(state.user.trackedMessageCount || 0).toLocaleString()} messages this month</span><div class="profile-badges">${renderBadges(state.user.badges || [], 8)}</div></div><div class="profile-stat"><strong>${Number(state.user.trackedMessageCount || 0).toLocaleString()}</strong><span>TRACKED HERE</span></div></section>${renderMissions()}` : ''}
     <section class="leaderboard-section"><div class="section-header"><div><span class="eyebrow">MOST ACTIVE</span><h2>Discord message leaderboard</h2></div><label class="search-field compact-search"><span aria-hidden="true">⌕</span><input id="communitySearch" type="search" placeholder="Find a member" aria-label="Search members" /></label></div><div class="period-tabs" role="group" aria-label="Leaderboard period">${periods.map(([period, label]) => `<button type="button" data-period="${period}" class="${state.leaderboardPeriod === period ? 'is-active' : ''}">${label}</button>`).join('')}</div><div class="member-list leaderboard-list" id="leaderboardList">${renderLeaderboard(users)}</div><p class="tracking-note">Current monthly season · tracked by Zenith since <strong>${escapeHtml(trackedSince)}</strong>. Lifetime totals are kept separately.</p></section>
     <section class="leaderboard-section study-leaderboard-section"><div class="section-header"><div><span class="eyebrow">FOCUS MODE</span><h2>Study VC leaderboard</h2></div><span class="tracking-note">${state.studyChannelId ? 'Time spent in the configured study voice channel.' : 'No study voice channel configured yet.'}</span></div><div class="member-list leaderboard-list">${renderStudyLeaderboard(state.studyLeaderboard)}</div></section>
@@ -1001,7 +1030,7 @@ async function boot() {
   renderTopbar();
   renderApp();
   if (state.page === 'watch' && state.roomId && state.user) connectRoomSocket(state.roomId);
-  if (state.page === 'community') refreshLeaderboard(state.leaderboardPeriod);
+  if (state.page === 'community') { refreshLeaderboard(state.leaderboardPeriod); refreshCommunityMissions(); }
   if (state.page === 'events') refreshEvents();
 }
 
