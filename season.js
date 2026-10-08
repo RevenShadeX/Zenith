@@ -14,6 +14,46 @@ function getSeasonKey(date = new Date()) {
   return values.year + '-' + values.month;
 }
 
+
+function getSeasonBounds(date = new Date()) {
+  const timeZone = getTimeZone();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+  const candidate = new Date(Date.UTC(values.year, values.month - 1, 1, 12, 0, 0));
+  const localParts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(candidate);
+  const localValues = Object.fromEntries(localParts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+  const zoneAsUtc = Date.UTC(localValues.year, localValues.month - 1, localValues.day, localValues.hour);
+  const start = new Date(candidate.getTime() - (zoneAsUtc - candidate.getTime()));
+  const nextYear = values.month === 12 ? values.year + 1 : values.year;
+  const nextMonth = values.month === 12 ? 1 : values.month + 1;
+  const nextCandidate = new Date(Date.UTC(nextYear, nextMonth - 1, 1, 12, 0, 0));
+  const nextLocalParts = new Intl.DateTimeFormat('en-US', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(nextCandidate);
+  const nextLocalValues = Object.fromEntries(nextLocalParts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+  const nextZoneAsUtc = Date.UTC(nextLocalValues.year, nextLocalValues.month - 1, nextLocalValues.day, nextLocalValues.hour);
+  const end = new Date(nextCandidate.getTime() - (nextZoneAsUtc - nextCandidate.getTime()));
+  return { start, end };
+}
+
 async function ensureUserSeason(database, discordUserId, now = new Date()) {
   const id = String(discordUserId);
   const seasonKey = getSeasonKey(now);
@@ -71,4 +111,4 @@ async function ensureUsersCurrentSeason(database, guildId, now = new Date()) {
   return getSeasonKey(now);
 }
 
-module.exports = { getSeasonKey, ensureUserSeason, ensureUsersCurrentSeason };
+module.exports = { getSeasonBounds, getSeasonKey, ensureUserSeason, ensureUsersCurrentSeason };
