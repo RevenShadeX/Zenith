@@ -197,6 +197,15 @@ function createDatabase(options = {}) {
         claimed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (mission_id, discord_user_id, period_key)
       )`,
+      `CREATE TABLE IF NOT EXISTS study_vc_time (
+        discord_user_id TEXT PRIMARY KEY REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        seconds INTEGER NOT NULL DEFAULT 0
+      )`,
+      `CREATE TABLE IF NOT EXISTS study_vc_sessions (
+        discord_user_id TEXT PRIMARY KEY REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        channel_id TEXT NOT NULL,
+        joined_at TEXT NOT NULL
+      )`,
     ];
     for (const statement of statements) await run(statement);
 
@@ -397,6 +406,15 @@ function createDatabase(options = {}) {
         points_reward INTEGER NOT NULL DEFAULT 0,
         claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (mission_id, discord_user_id, period_key)
+      )`,
+      `CREATE TABLE IF NOT EXISTS study_vc_time (
+        discord_user_id TEXT PRIMARY KEY REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        seconds BIGINT NOT NULL DEFAULT 0
+      )`,
+      `CREATE TABLE IF NOT EXISTS study_vc_sessions (
+        discord_user_id TEXT PRIMARY KEY REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        channel_id TEXT NOT NULL,
+        joined_at TIMESTAMPTZ NOT NULL
       )`,
       'CREATE INDEX IF NOT EXISTS idx_discord_events_guild_created ON discord_message_events (guild_id, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_discord_events_author_created ON discord_message_events (author_discord_user_id, created_at)',
