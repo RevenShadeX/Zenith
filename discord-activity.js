@@ -2,7 +2,7 @@
 
 const { isTrackableMessage } = require('./discord-bot');
 const { leaderboardWindowStart } = require('./leaderboard');
-const { getSeasonKey, ensureUserSeason } = require('./season');
+const { getSeasonBounds, getSeasonKey, ensureUserSeason } = require('./season');
 
 async function recordGuildMessage(database, message, guildId) {
   if (!isTrackableMessage(message, guildId)) return false;
@@ -77,13 +77,14 @@ async function recordGuildMessage(database, message, guildId) {
 async function getDiscordLeaderboard(database, guildId, period = 'all_time', now = new Date()) {
   const start = leaderboardWindowStart(period, now);
   const seasonKey = getSeasonKey(now);
+  const seasonStart = getSeasonBounds(now).start.toISOString();
   const params = [guildId];
   let messageExpression = 'u.season_message_count';
   let windowClause = '';
   if (start && period !== 'this_month') {
     messageExpression = 'COUNT(e.message_id)';
-    windowClause = ' AND e.created_at >= ?';
-    params.push(start, guildId, seasonKey);
+    windowClause = ' AND e.created_at >= ? AND e.created_at >= ?';
+    params.push(start, seasonStart, guildId, seasonKey);
   }
   return database.all(
     `SELECT u.discord_user_id AS id, u.username, u.display_name, u.avatar,
