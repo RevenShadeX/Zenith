@@ -16,6 +16,7 @@ const { canJoinRoom, isRoomHost } = require('./room-policy');
 const { classifyMediaUrl } = require('./media');
 const { leaderboardWindowStart } = require('./leaderboard');
 const { getMissionState, claimMission } = require('./missions');
+const { getStudyLeaderboard, getStudyVcChannelId, setStudyVcChannelId, startStudySession, stopStudySession, flushStudySessions } = require('./study-vc');
 const { assertProductionConfig } = require('./production-config');
 
 dotenv.config();
@@ -40,6 +41,7 @@ const app = express();
 const wss = new WebSocketServer({ noServer: true, maxPayload: 16 * 1024 });
 let discordBot = null;
 let server = null;
+let studyFlushTimer = null;
 
 function asyncRoute(handler) {
   return (req, res, next) => Promise.resolve(handler(req, res, next)).catch(next);
@@ -639,9 +641,13 @@ function createApp() {
 
   app.get('/api/community/leaderboard', asyncRoute(async (req, res) => {
     const period = String(req.query.period || 'all_time');
-    const users = await getMessageLeaderboard(period);
-    const tracking = await getTrackingInfo();
-    res.json({ period, users, tracking, source: 'discord_message_events' });
+    const [users, studyLeaderboard, tracking] = await Promise.all([
+      getMessageLeaderboard(period),
+      getStudyLeaderboard(database, process.env.DISCORD_GUILD_ID || 'unconfigured'),
+      getTrackingInfo(),
+    ]);
+    const studyChannelId = await getStudyVcChannelId(database);
+    res.json({ period, users, studyLeaderboard, studyChannelId, tracking, source: 'discord_message_events' });
   }));
 
   app.get('/api/leaderboards', asyncRoute(async (req, res) => {
@@ -948,6 +954,9 @@ async function ensureDiscordUser(discordUserId, userLike = {}) {
 }
 
 async function handleDiscordLevelCommand(target, userLike) {
+  if (target === 'study_vc') {
+    return getStudyLeaderboard(database, process.env.DISCORD_GUILD_ID || 'unconfigured');
+  }
   if (target === 'leaderboard') {
     return database.all('SELECT display_name AS "displayName", username, xp, level FROM users WHERE guild_id = ? ORDER BY level DESC, xp DESC, display_name ASC LIMIT 10', [process.env.DISCORD_GUILD_ID]);
   }
@@ -955,6 +964,40 @@ async function handleDiscordLevelCommand(target, userLike) {
   return { displayName: user.display_name || user.username, xp: Number(user.xp || 0), level: Number(user.level || 1), messages: Number(user.tracked_message_count || 0) };
 }
 
+async function handleStudyVoiceState(oldState, newState) {
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (oldState.guild?.id !== guildId && newState.guild?.id !== guildId) return;
+  const studyChannelId = await getStudyVcChannelId(database);
+  if (!studyChannelId) return;
+  const oldInStudy = oldState.channelId === studyChannelId;
+  const newInStudy = newState.channelId === studyChannelId;
+  if (oldInStudy && !newInStudy) {
+    await stopStudySession(database, oldState.id);
+    return;
+  }
+  if (newInStudy && (!oldInStudy || oldState.channelId !== newState.channelId)) {
+    if (newState.member?.user?.bot) return;
+    await ensureDiscordUser(newState.id, newState.member?.user || {});
+    await startStudySession(database, newState.id, studyChannelId);
+  }
+}
+
+async function configureLeaderboard(interaction, type, channel) {
+  if (type !== 'study_vc') return interaction.reply({ content: 'That leaderboard type is not available.', ephemeral: true });
+  if (!channel.isVoiceBased()) return interaction.reply({ content: 'Choose a voice or stage channel.', ephemeral: true });
+  const oldChannelId = await getStudyVcChannelId(database);
+  if (oldChannelId && oldChannelId !== channel.id) {
+    const sessions = await database.all('SELECT discord_user_id FROM study_vc_sessions');
+    for (const session of sessions) await stopStudySession(database, session.discord_user_id);
+  }
+  await setStudyVcChannelId(database, channel.id);
+  for (const member of channel.members.values()) {
+    if (member.user.bot) continue;
+    await ensureDiscordUser(member.id, member.user);
+    await startStudySession(database, member.id, channel.id);
+  }
+  return interaction.reply({ content: 'Study VC leaderboard is now tracking **' + channel.name + '**. Use `/leaderboard` with **Study VC time** to view it.' });
+}
 function discordEventTime(value) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? 'Invalid time' : '<t:' + Math.floor(date.getTime() / 1000) + ':F>';
@@ -1013,8 +1056,24 @@ async function startServer() {
       onMessage: recordDiscordMessage,
       onLevel: handleDiscordLevelCommand,
       onEventCommand: handleDiscordEventCommand,
-      onReady: async () => {
+      onLeaderboardConfig: configureLeaderboard,
+      onVoiceStateUpdate: handleStudyVoiceState,
+      onReady: async (guild) => {
         await database.run('INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)', [trackingDateKey(), new Date().toISOString()]);
+        const studyChannelId = await getStudyVcChannelId(database);
+        const studyChannel = studyChannelId ? guild.channels.cache.get(studyChannelId) : null;
+        if (studyChannel?.isVoiceBased()) {
+          for (const member of studyChannel.members.values()) {
+            if (member.user.bot) continue;
+            await ensureDiscordUser(member.id, member.user);
+            await startStudySession(database, member.id, studyChannelId);
+          }
+        }
+        if (studyFlushTimer) clearInterval(studyFlushTimer);
+        studyFlushTimer = setInterval(() => {
+          flushStudySessions(database).catch((error) => console.error('Study VC flush failed:', error.message));
+        }, 30000);
+        studyFlushTimer.unref?.();
       },
       onError: (error) => console.error('Discord bot error:', error.message),
     });
@@ -1078,6 +1137,8 @@ heartbeat.unref();
 
 async function shutdown() {
   clearInterval(heartbeat);
+  if (studyFlushTimer) clearInterval(studyFlushTimer);
+  try { await flushStudySessions(database); } catch (error) { console.error('Study VC final flush failed:', error.message); }
   await Promise.all([...activeConnections].map((socket) => new Promise((resolve) => {
     if (socket.readyState === WebSocket.CLOSED) return resolve();
     const timeout = setTimeout(() => {
