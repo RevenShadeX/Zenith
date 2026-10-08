@@ -259,9 +259,7 @@ async function refreshDailyStreak(discordUserId, dateKey) {
 async function getDailyGameState(discordUserId, dateKey = zenithDateKey()) {
   let daily = await database.get('SELECT word FROM daily_words WHERE date_key = ?', [dateKey]);
   if (!daily) {
-    let hash = 0;
-    for (const character of dateKey) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-    const digest = crypto.createHmac('sha256', SESSION_SECRET).update(dateKey).digest();
+        const digest = crypto.createHmac('sha256', SESSION_SECRET).update(dateKey).digest();
     const seed = digest.readUInt32BE(0);
     const word = DAILY_WORDS[seed % DAILY_WORDS.length];
     await database.run('INSERT OR IGNORE INTO daily_words (date_key, word) VALUES (?, ?)', [dateKey, word]);
