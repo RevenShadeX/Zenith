@@ -122,6 +122,14 @@ async function getUser(discordUserId) {
   return database.get('SELECT * FROM users WHERE discord_user_id = ?', [discordUserId]);
 }
 
+async function checkAndSyncBadges(discordUserId, now = new Date()) {
+  const badges = await checkAndUnlockBadges(database, discordUserId, now);
+  if (discordBot?.syncBadgeRole) {
+    for (const badge of badges) await discordBot.syncBadgeRole(discordUserId, badge);
+  }
+  return badges;
+}
+
 async function getPublicUser(discordUserId) {
   await ensureUserSeason(database, discordUserId);
   const user = await getUser(discordUserId);
@@ -133,7 +141,7 @@ async function getPublicUser(discordUserId) {
       admin = false;
     }
   }
-  const badges = user ? await checkAndUnlockBadges(database, discordUserId) : [];
+  const badges = user ? await checkAndSyncBadges(discordUserId) : [];
   return toPublicUser(user, admin, badges);
 }
 
@@ -628,7 +636,7 @@ function createApp() {
   }));
 
   app.get('/api/badges', requireAuth, asyncRoute(async (req, res) => {
-    const badges = await checkAndUnlockBadges(database, req.session.discordUserId);
+    const badges = await checkAndSyncBadges(req.session.discordUserId);
     res.json({ season: getSeasonKey(), badges });
   }));
 
@@ -673,7 +681,7 @@ function createApp() {
       getStudyLeaderboard(database, process.env.DISCORD_GUILD_ID || 'unconfigured'),
       getTrackingInfo(),
     ]);
-    await Promise.all(users.slice(0, 20).map((user) => checkAndUnlockBadges(database, user.id || user.discord_user_id)));
+    await Promise.all(users.slice(0, 20).map((user) => checkAndSyncBadges(user.id || user.discord_user_id)));
     const badgeMap = await getBadgesForUsers(database, users.slice(0, 20).map((user) => user.id || user.discord_user_id));
     for (const user of users) user.badges = (badgeMap.get(String(user.id || user.discord_user_id)) || []).slice(-3).reverse();
     const studyChannelId = await getStudyVcChannelId(database);
@@ -996,7 +1004,7 @@ async function handleDiscordMemberJoin(member, invite) {
      VALUES (?, ?, ?, ?, ?)`,
     [guildId, String(invite.code), String(invite.inviterId), String(member.id), new Date().toISOString()]
   );
-  await checkAndUnlockBadges(database, String(invite.inviterId));
+  await checkAndSyncBadges(String(invite.inviterId));
 }
 
 async function handleDiscordLevelCommand(target, userLike) {
