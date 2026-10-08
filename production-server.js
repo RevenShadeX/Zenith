@@ -96,7 +96,7 @@ function toPublicUser(row, admin = false, badges = []) {
     lastMessageAt: row.last_message_at || null,
     xp: Number(row.season_xp || 0),
     points: Number(row.season_points || 0),
-    level: Math.floor(Math.sqrt(Number(row.season_xp || 0) / 100)) + 1,
+    level: Math.floor(Math.sqrt(Number(row.season_xp || 0) / 120)) + 1,
     lifetimeXp: Number(row.xp || 0),
     lifetimePoints: Number(row.points || 0),
     movieNights: Number(row.movie_nights || 0),
