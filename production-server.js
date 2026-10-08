@@ -676,7 +676,7 @@ function createApp() {
   }));
 
   app.get('/api/missions/community', requireAuth, asyncRoute(async (req, res) => {
-    res.json(await getCommunityMissionState(database, new Date(), process.env.DISCORD_GUILD_ID || 'unconfigured'));
+    res.json(await getCommunityMissionState(database, new Date(), process.env.DISCORD_GUILD_ID || 'unconfigured', req.session.discordUserId));
   }));
 
   app.post('/api/missions/:id/claim', requireSameOrigin, requireAuth, asyncRoute(async (req, res) => {
