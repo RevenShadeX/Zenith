@@ -132,14 +132,33 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
       }
 
       if (interaction.commandName === 'leaderboard') {
+        const type = interaction.options.getString('type') || 'xp';
+        if (type === 'study_vc') {
+          const rows = await onLevel?.('study_vc') || [];
+          if (!rows.length) return interaction.reply({ content: 'No study VC time has been recorded yet.', ephemeral: true });
+          const lines = rows.slice(0, 10).map((row, index) =>
+            `**${index + 1}.** ${row.display_name || row.displayName} — **${row.duration}**`);
+          return interaction.reply({ content: `**Zenith Study VC Leaderboard**\n${lines.join('\n')}` });
+        }
         const period = interaction.options.getString('period') || 'all_time';
         const rows = await onLevel?.('leaderboard', period) || [];
         if (!rows.length) return interaction.reply({ content: 'No Zenith XP data yet.', ephemeral: true });
         const lines = rows.slice(0, 10).map((row, index) =>
           `**${index + 1}.** ${row.displayName} — Level ${row.level} · ${Number(row.xp).toLocaleString()} XP`);
-        return interaction.reply({ content: `**Zenith XP Leaderboard — ${period.replace('_', ' ')}**\\n${lines.join('\\n')}` });
+        return interaction.reply({ content: `**Zenith XP Leaderboard — ${period.replace('_', ' ')}**\n${lines.join('\n')}` });
       }
 
+      if (interaction.commandName === 'set') {
+        if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild)
+          && !interaction.memberPermissions?.has(PermissionFlagsBits.Administrator)) {
+          return interaction.reply({ content: 'You need Manage Server or Administrator permission to configure Zenith.', ephemeral: true });
+        }
+        if (interaction.options.getSubcommand() === 'leaderboard') {
+          const type = interaction.options.getString('type', true);
+          const channel = interaction.options.getChannel('channel', true);
+          return onLeaderboardConfig?.(interaction, type, channel);
+        }
+      }
       if (interaction.commandName === 'event') {
         const subcommand = interaction.options.getSubcommand();
         if ((subcommand === 'add' || subcommand === 'cancel')
