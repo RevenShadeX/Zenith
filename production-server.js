@@ -220,7 +220,8 @@ async function getDailyGameState(discordUserId, dateKey = zenithDateKey()) {
   const attempts = await database.get('SELECT guesses, solved, guesses_json FROM daily_game_attempts WHERE date_key = ? AND discord_user_id = ?', [dateKey, discordUserId]);
   let guesses = [];
   try { guesses = attempts ? JSON.parse(attempts.guesses_json || '[]') : []; } catch { guesses = []; }
-  return { date: dateKey, attempts: guesses, solved: Boolean(attempts?.solved), answer: attempts?.solved ? daily.word : null, attemptsRemaining: Math.max(0, 6 - guesses.length) };
+  const currentStreak = await refreshDailyStreak(discordUserId, dateKey);
+  return { date: dateKey, attempts: guesses, solved: Boolean(attempts?.solved), answer: attempts?.solved ? daily.word : null, attemptsRemaining: Math.max(0, 6 - guesses.length), currentStreak };
 }
 
 async function getMessageLeaderboard(period = 'all_time', now = new Date()) {
@@ -574,7 +575,7 @@ function createApp() {
   app.post('/auth/logout', requireSameOrigin, (req, res) => {
     req.session.destroy((error) => {
       if (error) return res.status(500).json({ error: 'Sign out failed.' });
-      res.clearCookie(SESSION_COOKIE_NAME, { httpOnly: true, secure: IS_PRODUCTION, sameSite: 'lax', path: '/' });
+      res.clearCookie(SESSION_COOKIE_NAME, { httpOnly: true, secure: USE_SECURE_COOKIES, sameSite: 'lax', path: '/' });
       res.json({ ok: true });
     });
   });
