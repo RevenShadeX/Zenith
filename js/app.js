@@ -25,6 +25,7 @@ const state = {
   mediaProvider: null,
   activeUsers: [],
   missions: null,
+  seasonHistory: [],
   studyRefreshTimer: null,
 };
 
@@ -340,6 +341,11 @@ function renderChatMessage(message) {
   return `<article class="chat-message"><img class="avatar" src="${escapeHtml(message.avatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=member')}" alt="" /><div><div class="chat-message-meta"><strong>${escapeHtml(name)}</strong><time>${escapeHtml(message.created_at ? new Date(message.created_at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : 'now')}</time></div><p>${escapeHtml(message.content || '')}</p></div></article>`;
 }
 
+function renderSeasonHistory() {
+  if (!state.seasonHistory.length) return '';
+  return `<section class="historical-note"><div><span class="eyebrow">SEASON HISTORY</span><h2>Previous months</h2><p>Your completed monthly seasons stay archived even after the current season resets.</p></div><div class="season-history-list">${state.seasonHistory.map((season) => `<article><strong>${escapeHtml(season.season_key)}</strong><span>${Number(season.xp || 0).toLocaleString()} XP · ${Number(season.points || 0).toLocaleString()} points</span><span>${Number(season.messages || 0).toLocaleString()} messages · ${Number(season.study_seconds || 0) >= 3600 ? Math.floor(Number(season.study_seconds) / 3600) + 'h' : Math.floor(Number(season.study_seconds || 0) / 60) + 'm'}</span><span>${Number(season.badge_count || 0)} badges</span></article>`).join('')}</div></section>`;
+}
+
 function renderCommunity() {
   const users = [...state.leaderboard].sort((left, right) => Number(right.message_count || 0) - Number(left.message_count || 0));
   const periods = [
@@ -355,6 +361,7 @@ function renderCommunity() {
     ${state.user ? `<section class="profile-summary"><img class="profile-avatar" src="${escapeHtml(state.user.avatar)}" alt="" /><div class="profile-identity"><span class="eyebrow">YOUR DISCORD PROFILE</span><h2>${escapeHtml(state.user.displayName || state.user.username)}</h2><span>Discord member · ${Number(state.user.trackedMessageCount || 0).toLocaleString()} messages this month</span><div class="profile-badges">${renderBadges(state.user.badges || [], 8)}</div></div><div class="profile-stat"><strong>${Number(state.user.trackedMessageCount || 0).toLocaleString()}</strong><span>TRACKED HERE</span></div></section>${renderMissions()}` : ''}
     <section class="leaderboard-section"><div class="section-header"><div><span class="eyebrow">MOST ACTIVE</span><h2>Discord message leaderboard</h2></div><label class="search-field compact-search"><span aria-hidden="true">⌕</span><input id="communitySearch" type="search" placeholder="Find a member" aria-label="Search members" /></label></div><div class="period-tabs" role="group" aria-label="Leaderboard period">${periods.map(([period, label]) => `<button type="button" data-period="${period}" class="${state.leaderboardPeriod === period ? 'is-active' : ''}">${label}</button>`).join('')}</div><div class="member-list leaderboard-list" id="leaderboardList">${renderLeaderboard(users)}</div><p class="tracking-note">Current monthly season · tracked by Zenith since <strong>${escapeHtml(trackedSince)}</strong>. Lifetime totals are kept separately.</p></section>
     <section class="leaderboard-section study-leaderboard-section"><div class="section-header"><div><span class="eyebrow">FOCUS MODE</span><h2>Study VC leaderboard</h2></div><span class="tracking-note">${state.studyChannelId ? 'Time spent in the configured study voice channel.' : 'No study voice channel configured yet.'}</span></div><div class="member-list leaderboard-list">${renderStudyLeaderboard(state.studyLeaderboard)}</div></section>
+    ${renderSeasonHistory()}
     <section class="historical-note"><div><span class="eyebrow">SEPARATE FROM LIVE TRACKING</span><h2>Historical Discord messages</h2><p>${escapeHtml(state.tracking?.historicalScope || 'Historical messages are not imported or included in this leaderboard.')}</p></div><strong>Not imported</strong></section>
   `;
 }
@@ -936,7 +943,13 @@ async function loadInitial() {
   }
 
   loadSavedGame();
-  if (state.user) await Promise.all([refreshDailyGame(), refreshMissions()]);
+  if (state.user) {
+    await Promise.all([
+      refreshDailyGame(),
+      refreshMissions(),
+      fetchJson('/api/seasons/history').then((response) => { state.seasonHistory = response.history || []; }).catch(() => { state.seasonHistory = []; }),
+    ]);
+  }
   if (state.page === 'watch' && state.roomId && state.user) {
     try {
       await fetchJson(`/api/rooms/${encodeURIComponent(state.roomId)}/join`, { method: 'POST' });
