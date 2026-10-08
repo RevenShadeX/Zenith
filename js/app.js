@@ -92,9 +92,18 @@ function startDiscordLogin() {
 async function refreshLiveHome() {
   try {
     const home = await fetchJson('/api/home');
-    state.memberCount = Number.isFinite(Number(home.tracking?.memberCount)) ? Number(home.tracking.memberCount) : null;
+    const nextCount = Number(home.tracking?.memberCount);
+    state.memberCount = Number.isFinite(nextCount) ? nextCount : null;
     state.status = home.status || state.status;
-    renderTopbar();
+    const countEl = document.querySelector('#serverMemberCount');
+    const valueEl = document.querySelector('#serverMemberCountValue');
+    if (countEl && valueEl) {
+      const hasCount = state.memberCount !== null;
+      countEl.classList.toggle('is-hidden', !hasCount);
+      valueEl.textContent = hasCount ? state.memberCount.toLocaleString() : '—';
+    } else {
+      renderTopbar();
+    }
   } catch {
     // Keep the last known live data if a background refresh fails.
   }
@@ -131,6 +140,7 @@ function navigate(page, roomId = null) {
 }
 
 function renderTopbar() {
+  const memberCount = Number.isFinite(Number(state.memberCount)) ? Number(state.memberCount) : null;
   const userHtml = state.user
     ? `<button class="profile-control" type="button" data-page="community" aria-label="Open your community profile">
         <img class="avatar" src="${escapeHtml(state.user.avatar)}" alt="" />
@@ -143,7 +153,7 @@ function renderTopbar() {
 
   topbarEl.innerHTML = `
     <a class="brand" href="#home" data-page="home" aria-label="Zenith home">
-      <span class="brand-mark" aria-hidden="true"></span><span>ZENITH</span>${state.memberCount !== null ? '<span class="server-member-count" title="Live Discord server member count"><span class="server-member-dot" aria-hidden="true"></span>${state.memberCount.toLocaleString()} MEMBERS</span>' : ''}
+      <span class="brand-mark" aria-hidden="true"></span><span>ZENITH</span><span id="serverMemberCount" class="server-member-count${memberCount === null ? ' is-hidden' : ''}" title="Live Discord server member count"><span class="server-member-dot" aria-hidden="true"></span><span id="serverMemberCountValue">${memberCount === null ? '—' : escapeHtml(memberCount.toLocaleString())}</span> MEMBERS</span>
     </a>
     <button class="mobile-menu-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" data-action="toggle-nav">
       <span></span><span></span><span></span>
