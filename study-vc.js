@@ -1,5 +1,7 @@
 'use strict';
 
+const { getSeasonKey, ensureUserSeason } = require('./season');
+
 const STUDY_VC_SETTING = 'study_vc_channel_id';
 
 function formatDuration(seconds) {
@@ -26,6 +28,7 @@ async function setStudyVcChannelId(database, channelId) {
 
 async function startStudySession(database, discordUserId, channelId) {
   if (!discordUserId || !channelId) return false;
+  await ensureUserSeason(database, discordUserId);
   const existing = await database.get('SELECT discord_user_id FROM study_vc_sessions WHERE discord_user_id = ?', [discordUserId]);
   if (existing) return false;
   await database.run(
@@ -46,6 +49,13 @@ async function stopStudySession(database, discordUserId, now = Date.now()) {
      ON CONFLICT(discord_user_id) DO UPDATE SET seconds = study_vc_time.seconds + excluded.seconds`,
     [String(discordUserId), seconds]
   );
+  const seasonKey = getSeasonKey(new Date(now));
+  await database.run(
+    `INSERT INTO season_study_vc_time (discord_user_id, season_key, seconds)
+     VALUES (?, ?, ?)
+     ON CONFLICT(discord_user_id, season_key) DO UPDATE SET seconds = season_study_vc_time.seconds + excluded.seconds`,
+    [String(discordUserId), seasonKey, seconds]
+  );
   await database.run('DELETE FROM study_vc_sessions WHERE discord_user_id = ?', [String(discordUserId)]);
   return seconds;
 }
@@ -62,21 +72,29 @@ async function flushStudySessions(database, now = Date.now()) {
        ON CONFLICT(discord_user_id) DO UPDATE SET seconds = study_vc_time.seconds + excluded.seconds`,
       [String(session.discord_user_id), seconds]
     );
+    const seasonKey = getSeasonKey(new Date(now));
+    await database.run(
+      `INSERT INTO season_study_vc_time (discord_user_id, season_key, seconds)
+       VALUES (?, ?, ?)
+       ON CONFLICT(discord_user_id, season_key) DO UPDATE SET seconds = season_study_vc_time.seconds + excluded.seconds`,
+      [String(session.discord_user_id), seasonKey, seconds]
+    );
     await database.run('UPDATE study_vc_sessions SET joined_at = ? WHERE discord_user_id = ?', [new Date(now).toISOString(), String(session.discord_user_id)]);
   }
 }
 
 async function getStudyLeaderboard(database, guildId, now = Date.now()) {
   await flushStudySessions(database, now);
+  const seasonKey = getSeasonKey(new Date(now));
   const rows = await database.all(
     `SELECT u.discord_user_id AS id, u.username, u.display_name, u.avatar,
        COALESCE(t.seconds, 0) AS seconds
-     FROM study_vc_time t
+     FROM season_study_vc_time t
      INNER JOIN users u ON u.discord_user_id = t.discord_user_id
-     WHERE u.guild_id = ?
+     WHERE u.guild_id = ? AND t.season_key = ?
      ORDER BY seconds DESC, u.display_name ASC
      LIMIT 100`,
-    [guildId]
+    [guildId, seasonKey]
   );
   return rows.map((row) => ({
     ...row,
