@@ -19,6 +19,7 @@ const { getMissionState, claimMission } = require('./missions');
 const { checkAndUnlockBadges, getBadgesForUsers, getUserBadges } = require('./badges');
 const { getStudyLeaderboard, getStudyVcChannelId, setStudyVcChannelId, startStudySession, stopStudySession, flushStudySessions } = require('./study-vc');
 const { assertProductionConfig } = require('./production-config');
+const { getSeasonKey, ensureUserSeason, ensureUsersCurrentSeason } = require('./season');
 
 dotenv.config();
 
@@ -90,11 +91,14 @@ function toPublicUser(row, admin = false, badges = []) {
     displayName: row.display_name || row.username,
     avatar: row.avatar || '',
     guildId: row.guild_id,
-    trackedMessageCount: Number(row.tracked_message_count || 0),
+    trackedMessageCount: Number(row.season_message_count || 0),
+    lifetimeMessageCount: Number(row.tracked_message_count || 0),
     lastMessageAt: row.last_message_at || null,
-    xp: Number(row.xp || 0),
-    points: Number(row.points || 0),
-    level: Number(row.level || 1),
+    xp: Number(row.season_xp || 0),
+    points: Number(row.season_points || 0),
+    level: Math.floor(Math.sqrt(Number(row.season_xp || 0) / 100)) + 1,
+    lifetimeXp: Number(row.xp || 0),
+    lifetimePoints: Number(row.points || 0),
     movieNights: Number(row.movie_nights || 0),
     musicNights: Number(row.music_nights || 0),
     gameWins: Number(row.game_wins || 0),
@@ -118,6 +122,7 @@ async function getUser(discordUserId) {
 }
 
 async function getPublicUser(discordUserId) {
+  await ensureUserSeason(database, discordUserId);
   const user = await getUser(discordUserId);
   let admin = false;
   if (user && discordBot) {
@@ -231,6 +236,7 @@ async function getDailyGameState(discordUserId, dateKey = zenithDateKey()) {
 }
 
 async function getMessageLeaderboard(period = 'all_time', now = new Date()) {
+  await ensureUsersCurrentSeason(database, process.env.DISCORD_GUILD_ID || 'unconfigured', now);
   return getDiscordLeaderboard(database, process.env.DISCORD_GUILD_ID || 'unconfigured', period, now);
 }
 
@@ -961,6 +967,7 @@ async function ensureDiscordUser(discordUserId, userLike = {}) {
      ON CONFLICT(discord_user_id) DO UPDATE SET username = excluded.username, display_name = excluded.display_name, avatar = excluded.avatar, guild_id = excluded.guild_id, updated_at = CURRENT_TIMESTAMP`,
     [id, username, displayName, avatar, process.env.DISCORD_GUILD_ID]
   );
+  await ensureUserSeason(database, id);
   return getUser(id);
 }
 
@@ -969,10 +976,13 @@ async function handleDiscordLevelCommand(target, userLike) {
     return getStudyLeaderboard(database, process.env.DISCORD_GUILD_ID || 'unconfigured');
   }
   if (target === 'leaderboard') {
-    return database.all('SELECT display_name AS "displayName", username, xp, level FROM users WHERE guild_id = ? ORDER BY level DESC, xp DESC, display_name ASC LIMIT 10', [process.env.DISCORD_GUILD_ID]);
+    await ensureUsersCurrentSeason(database, process.env.DISCORD_GUILD_ID || 'unconfigured');
+    return database.all('SELECT display_name AS "displayName", username, season_xp AS xp, level, season_message_count AS messages, season_points AS points FROM users WHERE guild_id = ? AND season_key = ? ORDER BY season_xp DESC, season_message_count DESC, display_name ASC LIMIT 10', [process.env.DISCORD_GUILD_ID, getSeasonKey()]);
   }
   const user = await ensureDiscordUser(String(target), userLike || {});
-  return { displayName: user.display_name || user.username, xp: Number(user.xp || 0), level: Number(user.level || 1), messages: Number(user.tracked_message_count || 0) };
+  await ensureUserSeason(database, String(target));
+  const current = await getUser(String(target));
+  return { displayName: current.display_name || current.username, xp: Number(current.season_xp || 0), level: Math.floor(Math.sqrt(Number(current.season_xp || 0) / 100)) + 1, messages: Number(current.season_message_count || 0) };
 }
 
 async function handleStudyVoiceState(oldState, newState) {
@@ -1070,6 +1080,7 @@ async function startServer() {
       onLeaderboardConfig: configureLeaderboard,
       onVoiceStateUpdate: handleStudyVoiceState,
       onReady: async (guild) => {
+        await ensureUsersCurrentSeason(database, process.env.DISCORD_GUILD_ID || 'unconfigured');
         await database.run('INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)', [trackingDateKey(), new Date().toISOString()]);
         const studyChannelId = await getStudyVcChannelId(database);
         const studyChannel = studyChannelId ? guild.channels.cache.get(studyChannelId) : null;
