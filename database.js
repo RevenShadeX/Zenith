@@ -390,8 +390,14 @@ function createDatabase(options = {}) {
       'CREATE INDEX IF NOT EXISTS idx_discord_events_author_created ON discord_message_events (author_discord_user_id, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_room_messages_room_created ON room_messages (room_id, created_at)',
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_xp_at TIMESTAMPTZ',
+      'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS media_provider TEXT NOT NULL DEFAULT \'direct_video\'',
+      'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS playback_state TEXT NOT NULL DEFAULT \'paused\'',
+      'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS playback_position DOUBLE PRECISION NOT NULL DEFAULT 0',
+      'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS playback_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()',
       'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ',
       'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS end_reason TEXT',
+      'ALTER TABLE events ADD COLUMN IF NOT EXISTS host_discord_user_id TEXT',
+      'UPDATE events SET host_discord_user_id = \'\' WHERE host_discord_user_id IS NULL',
     ];
     for (const statement of statements) await run(statement);
 
