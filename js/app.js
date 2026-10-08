@@ -4,6 +4,8 @@ const state = {
   rooms: [],
   events: [],
   leaderboard: [],
+  studyLeaderboard: [],
+  studyChannelId: '',
   tracking: null,
   leaderboardPeriod: 'all_time',
   latestMessages: [],
@@ -23,6 +25,7 @@ const state = {
   mediaProvider: null,
   activeUsers: [],
   missions: null,
+  studyRefreshTimer: null,
 };
 
 const appEl = document.querySelector('#app');
@@ -230,6 +233,18 @@ function renderLeaderboard(users = state.leaderboard, limit = users.length) {
   `).join('');
 }
 
+function renderStudyLeaderboard(rows = state.studyLeaderboard, limit = rows.length) {
+  if (!rows.length) return '<div class="empty-state">No study time recorded yet. Set a study voice channel with the Zenith bot first.</div>';
+  return rows.slice(0, limit).map((user, index) => `
+    <article class="member-row study-member-row">
+      <span class="rank-number">${String(index + 1).padStart(2, '0')}</span>
+      <img class="avatar member-avatar" src="${escapeHtml(user.avatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=member')}" alt="" />
+      <span class="member-name">${escapeHtml(user.display_name || user.username || 'Member')}${user.id === state.user?.id ? '<small>YOU</small>' : ''}</span>
+      <span class="member-points">${escapeHtml(user.duration || '0m')} <small>STUDY</small></span>
+    </article>
+  `).join('');
+}
+
 function renderEventCard(event, index = 0) {
   const date = new Date(event.start_time || Date.now());
   const joined = state.joinedEvents.has(event.id);
@@ -330,6 +345,7 @@ function renderCommunity() {
     <section class="page-section page-heading"><span class="eyebrow">ACTIVITY FROM YOUR DISCORD SERVER</span><div class="heading-row"><div><h1>Most active</h1><p>Counts come from human messages observed by the Zenith bot.</p></div><div class="community-total"><strong>${users.length.toString().padStart(2, '0')}</strong><span>MEMBERS<br />IN THIS PERIOD</span></div></div></section>
     ${state.user ? `<section class="profile-summary"><img class="profile-avatar" src="${escapeHtml(state.user.avatar)}" alt="" /><div class="profile-identity"><span class="eyebrow">YOUR DISCORD PROFILE</span><h2>${escapeHtml(state.user.displayName || state.user.username)}</h2><span>Discord member · ${Number(state.user.trackedMessageCount || 0).toLocaleString()} tracked messages</span></div><div class="profile-stat"><strong>${Number(state.user.trackedMessageCount || 0).toLocaleString()}</strong><span>TRACKED HERE</span></div></section>${renderMissions()}` : ''}
     <section class="leaderboard-section"><div class="section-header"><div><span class="eyebrow">MOST ACTIVE</span><h2>Discord message leaderboard</h2></div><label class="search-field compact-search"><span aria-hidden="true">⌕</span><input id="communitySearch" type="search" placeholder="Find a member" aria-label="Search members" /></label></div><div class="period-tabs" role="group" aria-label="Leaderboard period">${periods.map(([period, label]) => `<button type="button" data-period="${period}" class="${state.leaderboardPeriod === period ? 'is-active' : ''}">${label}</button>`).join('')}</div><div class="member-list leaderboard-list" id="leaderboardList">${renderLeaderboard(users)}</div><p class="tracking-note">Tracked by Zenith since <strong>${escapeHtml(trackedSince)}</strong>. These are not historical Discord message totals.</p></section>
+    <section class="leaderboard-section study-leaderboard-section"><div class="section-header"><div><span class="eyebrow">FOCUS MODE</span><h2>Study VC leaderboard</h2></div><span class="tracking-note">${state.studyChannelId ? 'Time spent in the configured study voice channel.' : 'No study voice channel configured yet.'}</span></div><div class="member-list leaderboard-list">${renderStudyLeaderboard(state.studyLeaderboard)}</div></section>
     <section class="historical-note"><div><span class="eyebrow">SEPARATE FROM LIVE TRACKING</span><h2>Historical Discord messages</h2><p>${escapeHtml(state.tracking?.historicalScope || 'Historical messages are not imported or included in this leaderboard.')}</p></div><strong>Not imported</strong></section>
   `;
 }
@@ -630,8 +646,12 @@ async function refreshLeaderboard(period) {
     const response = await fetchJson(`/api/community/leaderboard?period=${encodeURIComponent(period)}`);
     if (state.page !== 'community' || state.leaderboardPeriod !== period) return;
     state.leaderboard = response.users || [];
+    state.studyLeaderboard = response.studyLeaderboard || [];
+    state.studyChannelId = response.studyChannelId || '';
     state.tracking = response.tracking || null;
     renderApp();
+    window.clearTimeout(state.studyRefreshTimer);
+    state.studyRefreshTimer = window.setTimeout(() => refreshLeaderboard(period), 30000);
   } catch (error) {
     showToast(error.message, 'error');
   }
