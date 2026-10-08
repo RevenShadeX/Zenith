@@ -267,6 +267,11 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
     throw error;
   });
 
+  async function getMemberCount() {
+    if (!guild) await ready;
+    return Number(guild.memberCount || 0);
+  }
+
   async function getGuildMember(discordUserId) {
     if (!guild) await ready;
     return guild.members.fetch(discordUserId);
@@ -278,7 +283,7 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
       || member.permissions.has(PermissionFlagsBits.ManageGuild);
   }
 
-  return { client, getGuildMember, isGuildAdministrator, syncBadgeRole, ready, commands: COMMANDS };
+  return { client, getGuildMember, getMemberCount, isGuildAdministrator, syncBadgeRole, ready, commands: COMMANDS };
 }
 
 module.exports = { COMMANDS, createDiscordBot, isTrackableMessage };
