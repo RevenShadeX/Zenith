@@ -20,6 +20,8 @@ const { assertProductionConfig } = require('./production-config');
 dotenv.config();
 
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+const ALLOW_INSECURE_HTTP = String(process.env.ALLOW_INSECURE_HTTP || '').toLowerCase() === 'true';
+const USE_SECURE_COOKIES = IS_PRODUCTION && !ALLOW_INSECURE_HTTP;
 assertProductionConfig(process.env);
 
 const PORT = Number(process.env.PORT || 3000);
@@ -27,7 +29,7 @@ const OAUTH_CONFIGURED = Boolean(process.env.DISCORD_CLIENT_ID && process.env.DI
 const BOT_CONFIGURED = Boolean(process.env.DISCORD_BOT_TOKEN && process.env.DISCORD_GUILD_ID);
 const DISCORD_API = 'https://discord.com/api/v10';
 const SESSION_SECRET = process.env.SESSION_SECRET || crypto.randomBytes(32).toString('hex');
-const SESSION_COOKIE_NAME = IS_PRODUCTION ? '__Host-zenith.sid' : 'zenith.sid';
+const SESSION_COOKIE_NAME = USE_SECURE_COOKIES ? '__Host-zenith.sid' : 'zenith.sid';
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const database = createDatabase({ databaseUrl: DATABASE_URL });
 const roomSockets = new Map();
@@ -493,7 +495,9 @@ function createApp() {
   if (IS_PRODUCTION) app.set('trust proxy', 1);
 
   app.use(helmet({
+    strictTransportSecurity: USE_SECURE_COOKIES ? undefined : false,
     contentSecurityPolicy: {
+      useDefaults: true,
       directives: {
         defaultSrc: ["'self'"],
         baseUri: ["'self'"],
@@ -505,6 +509,7 @@ function createApp() {
         objectSrc: ["'none'"],
         scriptSrc: ["'self'", 'https://www.youtube.com', 'https://player.vimeo.com'],
         styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+        upgradeInsecureRequests: USE_SECURE_COOKIES ? [] : null,
       },
     },
     crossOriginEmbedderPolicy: false,
@@ -893,7 +898,7 @@ function attachSessionMiddleware() {
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, secure: IS_PRODUCTION, sameSite: 'lax', path: '/', maxAge: 7 * 24 * 60 * 60 * 1000 },
+    cookie: { httpOnly: true, secure: USE_SECURE_COOKIES, sameSite: 'lax', path: '/', maxAge: 7 * 24 * 60 * 60 * 1000 },
   });
 }
 
