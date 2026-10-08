@@ -7,6 +7,7 @@ const state = {
   studyLeaderboard: [],
   studyChannelId: '',
   tracking: null,
+  memberCount: null,
   leaderboardPeriod: 'this_month',
   latestMessages: [],
   messages: [],
@@ -130,7 +131,7 @@ function renderTopbar() {
 
   topbarEl.innerHTML = `
     <a class="brand" href="#home" data-page="home" aria-label="Zenith home">
-      <span class="brand-mark" aria-hidden="true"></span><span>ZENITH</span>
+      <span class="brand-mark" aria-hidden="true"></span><span>ZENITH</span>${state.memberCount !== null ? '<span class="server-member-count" title="Live Discord server member count"><span class="server-member-dot" aria-hidden="true"></span>${state.memberCount.toLocaleString()} MEMBERS</span>' : ''}
     </a>
     <button class="mobile-menu-toggle" type="button" aria-label="Toggle navigation" aria-expanded="false" data-action="toggle-nav">
       <span></span><span></span><span></span>
@@ -694,6 +695,7 @@ async function refreshLeaderboard(period) {
     state.studyLeaderboard = response.studyLeaderboard || [];
     state.studyChannelId = response.studyChannelId || '';
     state.tracking = response.tracking || null;
+    state.memberCount = Number.isFinite(Number(state.tracking?.memberCount)) ? Number(state.tracking.memberCount) : null;
     renderApp();
     window.clearTimeout(state.studyRefreshTimer);
     state.studyRefreshTimer = window.setTimeout(() => refreshLeaderboard(period), 30000);
