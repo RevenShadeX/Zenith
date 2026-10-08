@@ -103,10 +103,10 @@ async function getMetricProgress(database, userId, mission, now = new Date()) {
   return 0;
 }
 
-async function getCommunityMissionState(database, now = new Date(), guildId = process.env.DISCORD_GUILD_ID || 'unconfigured') {
+async function getCommunityMissionState(database, now = new Date(), guildId = process.env.DISCORD_GUILD_ID || 'unconfigured', currentUserId = '') {
   const users = await database.all(
-    'SELECT discord_user_id, username, display_name, avatar FROM users WHERE guild_id = ? ORDER BY display_name ASC',
-    [guildId]
+    'SELECT discord_user_id, username, display_name, avatar FROM users WHERE guild_id = ? OR discord_user_id = ? ORDER BY display_name ASC',
+    [guildId, currentUserId]
   );
   const missions = [...DAILY_MISSIONS, ...WEEKLY_MISSIONS];
   const claims = users.length
