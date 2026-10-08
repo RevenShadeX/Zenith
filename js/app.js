@@ -22,6 +22,7 @@ const state = {
   reconnectAttempts: 0,
   mediaProvider: null,
   activeUsers: [],
+  missions: null,
 };
 
 const appEl = document.querySelector('#app');
@@ -161,6 +162,45 @@ function getHostLabel(room) {
   return room.host_display_name || host?.display_name || host?.username || room.host_user_id || 'Zenith member';
 }
 
+function renderMissions(compact = false) {
+  if (!state.user || !state.missions) return '';
+  const groups = [
+    ['DAILY', state.missions.daily || []],
+    ['WEEKLY', state.missions.weekly || []],
+  ];
+  const cards = groups.flatMap(([label, missions]) => missions.map((mission) => {
+    const percent = Math.min(100, Math.round((mission.progress / mission.target) * 100));
+    const action = mission.completed && !mission.claimed
+      ? \`<button class="button button-small button-primary" type="button" data-action="claim-mission" data-mission-id="\${escapeHtml(mission.id)}" data-period-key="\${escapeHtml(mission.periodKey)}">Claim +\${Number(mission.xp).toLocaleString()} XP</button>\`
+      : mission.claimed
+        ? '<span class="mission-claimed">CLAIMED</span>'
+        : '';
+    return \`<article class="mission-card \${mission.claimed ? 'is-claimed' : ''}">
+      <div class="mission-card-top"><span class="eyebrow">\${label}</span><strong>\${Number(mission.progress).toLocaleString()} / \${Number(mission.target).toLocaleString()}</strong></div>
+      <h3>\${escapeHtml(mission.title)}</h3>
+      <p>\${escapeHtml(mission.description)}</p>
+      <div class="mission-progress"><span style="width:\${percent}%"></span></div>
+      <div class="mission-footer"><span>+\${Number(mission.xp).toLocaleString()} XP · +\${Number(mission.points).toLocaleString()} points</span>\${action}</div>
+    </article>\`;
+  })).join('');
+  return \`<section class="missions-section \${compact ? 'missions-compact' : ''}">
+    <div class="section-header"><div><span class="eyebrow">KEEP THE COMMUNITY MOVING</span><h2>Daily & weekly missions</h2></div><span class="mission-reset">Daily resets each day · Weekly resets Monday</span></div>
+    <div class="missions-grid">\${cards}</div>
+  </section>\`;
+}
+
+async function refreshMissions() {
+  if (!state.user) {
+    state.missions = null;
+    return;
+  }
+  try {
+    state.missions = await fetchJson('/api/missions');
+  } catch {
+    state.missions = null;
+  }
+}
+
 function renderRoomCard(room, index = 0) {
   return `
     <article class="room-card">
@@ -219,7 +259,7 @@ function renderHome() {
       </div>
     </section>
 
-    ${state.user ? `<section class="welcome-strip"><div><span class="eyebrow">WELCOME BACK</span><strong>${escapeHtml(state.user.displayName || state.user.username)}</strong></div><div class="welcome-xp"><span>LEVEL ${state.user.level || 1}</span><strong>${Number(state.user.xp || 0).toLocaleString()} XP</strong></div><button class="button button-icon button-outline" type="button" data-page="community" aria-label="View your profile">↗</button></section>` : ''}
+    ${state.user ? `<section class="welcome-strip"><div><span class="eyebrow">WELCOME BACK</span><strong>${escapeHtml(state.user.displayName || state.user.username)}</strong></div><div class="welcome-xp"><span>LEVEL ${state.user.level || 1}</span><strong>${Number(state.user.xp || 0).toLocaleString()} XP</strong></div><button class="button button-icon button-outline" type="button" data-page="community" aria-label="View your profile">↗</button></section>${renderMissions(true)}` : ''}
 
     <section class="page-section">
       <div class="section-header"><div><span class="eyebrow">HAPPENING RIGHT NOW</span><h2>Rooms with the lights on</h2></div><button class="text-link" type="button" data-page="rooms">All rooms <span aria-hidden="true">↗</span></button></div>
@@ -288,7 +328,7 @@ function renderCommunity() {
     : 'Waiting for the bot to connect';
   return `
     <section class="page-section page-heading"><span class="eyebrow">ACTIVITY FROM YOUR DISCORD SERVER</span><div class="heading-row"><div><h1>Most active</h1><p>Counts come from human messages observed by the Zenith bot.</p></div><div class="community-total"><strong>${users.length.toString().padStart(2, '0')}</strong><span>MEMBERS<br />IN THIS PERIOD</span></div></div></section>
-    ${state.user ? `<section class="profile-summary"><img class="profile-avatar" src="${escapeHtml(state.user.avatar)}" alt="" /><div class="profile-identity"><span class="eyebrow">YOUR DISCORD PROFILE</span><h2>${escapeHtml(state.user.displayName || state.user.username)}</h2><span>Discord member · ${Number(state.user.trackedMessageCount || 0).toLocaleString()} tracked messages</span></div><div class="profile-stat"><strong>${Number(state.user.trackedMessageCount || 0).toLocaleString()}</strong><span>TRACKED HERE</span></div></section>` : ''}
+    ${state.user ? `<section class="profile-summary"><img class="profile-avatar" src="${escapeHtml(state.user.avatar)}" alt="" /><div class="profile-identity"><span class="eyebrow">YOUR DISCORD PROFILE</span><h2>${escapeHtml(state.user.displayName || state.user.username)}</h2><span>Discord member · ${Number(state.user.trackedMessageCount || 0).toLocaleString()} tracked messages</span></div><div class="profile-stat"><strong>${Number(state.user.trackedMessageCount || 0).toLocaleString()}</strong><span>TRACKED HERE</span></div></section>${renderMissions()}` : ''}
     <section class="leaderboard-section"><div class="section-header"><div><span class="eyebrow">MOST ACTIVE</span><h2>Discord message leaderboard</h2></div><label class="search-field compact-search"><span aria-hidden="true">⌕</span><input id="communitySearch" type="search" placeholder="Find a member" aria-label="Search members" /></label></div><div class="period-tabs" role="group" aria-label="Leaderboard period">${periods.map(([period, label]) => `<button type="button" data-period="${period}" class="${state.leaderboardPeriod === period ? 'is-active' : ''}">${label}</button>`).join('')}</div><div class="member-list leaderboard-list" id="leaderboardList">${renderLeaderboard(users)}</div><p class="tracking-note">Tracked by Zenith since <strong>${escapeHtml(trackedSince)}</strong>. These are not historical Discord message totals.</p></section>
     <section class="historical-note"><div><span class="eyebrow">SEPARATE FROM LIVE TRACKING</span><h2>Historical Discord messages</h2><p>${escapeHtml(state.tracking?.historicalScope || 'Historical messages are not imported or included in this leaderboard.')}</p></div><strong>Not imported</strong></section>
   `;
@@ -656,6 +696,7 @@ async function handleClick(event) {
       state.roomId = room.id;
       state.messages = messages || [];
       state.activeUsers = [];
+      await refreshMissions();
       state.playback = null;
       navigate('watch', room.id);
     } catch (error) {
@@ -671,6 +712,7 @@ async function handleClick(event) {
     try {
       await fetchJson(`/api/events/${encodeURIComponent(control.dataset.eventId)}/join`, { method: 'POST' });
       state.joinedEvents.add(control.dataset.eventId);
+      await refreshMissions();
       renderApp();
       showToast('You’re on the list. See you there.', 'success');
     } catch (error) {
@@ -744,6 +786,7 @@ async function handleSubmit(event) {
       state.rooms.unshift(room);
       state.roomId = room.id;
       state.messages = [];
+      await refreshMissions();
       showToast('Your room is open.', 'success');
       navigate('watch', room.id);
     } else if (form.id === 'mediaForm') {
@@ -772,6 +815,7 @@ async function handleSubmit(event) {
       if (solved) state.game.answer = answer;
       saveGame();
       renderApp();
+      await refreshMissions();
       if (solved) showToast('Puzzle solved. Well played.', 'success');
       else if (state.game.guesses.length >= 6) showToast('That was the last try. New puzzle tomorrow.', 'info');
       else document.querySelector('#guessInput')?.focus();
@@ -843,7 +887,7 @@ async function loadInitial() {
   }
 
   loadSavedGame();
-  if (state.user) await refreshDailyGame();
+  if (state.user) await Promise.all([refreshDailyGame(), refreshMissions()]);
   if (state.page === 'watch' && state.roomId && state.user) {
     try {
       await fetchJson(`/api/rooms/${encodeURIComponent(state.roomId)}/join`, { method: 'POST' });
