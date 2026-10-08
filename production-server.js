@@ -955,7 +955,7 @@ function createApp() {
     res.json({ users, rooms: rooms.map(publicRoom), events, tracking });
   }));
 
-  app.use('/css', express.static(path.join(__dirname, 'css'), { dotfiles: 'deny', fallthrough: false, maxAge: IS_PRODUCTION ? '1h' : 0 }));
+  app.use('/css', express.static(path.join(__dirname, 'css'), { dotfiles: 'deny', fallthrough: false, maxAge: 0 }));
   app.use('/js', express.static(path.join(__dirname, 'js'), { dotfiles: 'deny', fallthrough: false, maxAge: IS_PRODUCTION ? '1h' : 0 }));
   app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
