@@ -239,7 +239,10 @@ h3 { font-size: 20px; line-height: 1.2; font-weight: 600; }
 .watch-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 17px; margin-top: 20px; }
 .watch-main { min-width: 0; }
 .video-frame { position: relative; display: grid; place-items: center; min-height: 380px; overflow: hidden; background: #030405; border: 1px solid var(--line); }
+.video-frame:fullscreen { width: 100vw; height: 100vh; min-height: 100vh; border: 0; }
 .video-frame video { width: 100%; max-height: 66vh; aspect-ratio: 16 / 9; object-fit: contain; background: #030405; }
+.video-frame:fullscreen .watch-video,
+.video-frame:fullscreen .watch-embed { width: 100%; height: 100%; max-height: none; }
 .video-placeholder { color: var(--muted); font-size: 13px; }
 .video-live { position: absolute; top: 13px; left: 13px; display: flex; align-items: center; gap: 8px; padding: 7px 9px; background: rgba(5, 7, 8, .75); font-size: 9px; font-weight: 700; }
 .watch-details { display: flex; justify-content: space-between; align-items: center; gap: 18px; padding: 17px 0; border-bottom: 1px solid var(--line); }
@@ -304,7 +307,7 @@ h3 { font-size: 20px; line-height: 1.2; font-weight: 600; }
 .game-streak > span:last-child { color: var(--muted); font-size: 11px; line-height: 1.5; }
 .event-create-wrap { margin: 20px 0; padding: 20px; background: rgba(19, 25, 29, .82); border: 1px solid var(--line); }
 .event-create-wrap.is-hidden { display: none; }
-.event-form { grid-template-columns: 1.3fr .8fr 1fr auto; align-items: end; }
+.event-form { grid-template-columns: 1.3fr .8fr 1fr 1fr auto; align-items: end; }
 .event-form .form-wide { grid-column: 1 / 3; }
 .event-form > .button { grid-column: auto; }
 .events-list { display: grid; gap: 10px; margin-top: 24px; }
@@ -439,6 +442,22 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .watch-video, .watch-embed { width: 100%; height: 100%; aspect-ratio: 16 / 9; border: 0; background: #030405; object-fit: contain; }
 .watch-video[controls] { position: relative; z-index: 1; }
 .watch-embed { position: relative; z-index: 1; }
+.player-tools { position: absolute; z-index: 8; top: 13px; right: 13px; display: flex; gap: 7px; opacity: .82; transition: opacity 160ms ease; }
+.video-frame:hover .player-tools,
+.video-frame:focus-within .player-tools,
+.video-frame:fullscreen .player-tools { opacity: 1; }
+.button-glass { color: var(--text); background: rgba(7, 9, 11, .72); border-color: rgba(255,255,255,.16); backdrop-filter: blur(8px); }
+.chat-toasts { position: absolute; z-index: 7; top: 58px; right: 13px; display: grid; gap: 8px; width: min(360px, calc(100% - 26px)); pointer-events: none; }
+.chat-toast { padding: 10px 12px; color: var(--text); background: rgba(9, 12, 15, .9); border: 1px solid rgba(255,255,255,.1); box-shadow: 0 10px 30px rgba(0,0,0,.28); animation: chat-toast-in 180ms ease-out; transition: opacity 350ms ease, transform 350ms ease; }
+.chat-toast.is-fading { opacity: 0; transform: translateX(16px); }
+.chat-toast .chat-message { grid-template-columns: 26px minmax(0,1fr); gap: 8px; }
+.chat-toast .chat-message .avatar { width: 25px; height: 25px; }
+.chat-toast .chat-message p { font-size: 11px; }
+.fullscreen-chat { position: absolute; z-index: 9; top: 56px; right: 13px; bottom: 13px; display: flex; width: min(360px, calc(100% - 26px)); flex-direction: column; overflow: hidden; background: rgba(10, 13, 16, .94); border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(0,0,0,.45); backdrop-filter: blur(12px); }
+.fullscreen-chat.is-hidden { display: none; }
+.fullscreen-chat > header { display: flex; align-items: center; justify-content: space-between; padding: 11px 12px; border-bottom: 1px solid var(--line); }
+.fullscreen-chat .chat-messages { min-height: 0; }
+@keyframes chat-toast-in { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
 .playback-hint { position: absolute; z-index: 3; bottom: 54px; left: 50%; padding: 11px 14px; color: var(--text); background: rgba(8, 10, 12, .92); border: 1px solid var(--line); transform: translateX(-50%); cursor: pointer; }
 .playback-hint.is-hidden { display: none; }
 .player-error { display: grid; place-items: center; width: 100%; height: 100%; padding: 24px; color: #ffd8de; background: #211418; font-size: 13px; text-align: center; }
