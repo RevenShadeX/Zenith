@@ -12,7 +12,7 @@ const COMMANDS = [
     description: 'Show a Zenith leaderboard',
     options: [
       { name: 'type', description: 'Leaderboard to show', type: ApplicationCommandOptionType.String, required: false, choices: [{ name: 'XP / activity', value: 'xp' }, { name: 'Study VC time', value: 'study_vc' }] },
-      { name: 'period', description: 'Time period for the XP leaderboard', type: ApplicationCommandOptionType.String, required: false, choices: [{ name: 'Today', value: 'today' }, { name: 'This week', value: 'this_week' }, { name: 'This month', value: 'this_month' }, { name: 'All time', value: 'all_time' }] },
+      { name: 'period', description: 'Time period for the XP leaderboard', type: ApplicationCommandOptionType.String, required: false, choices: [{ name: 'Today', value: 'today' }, { name: 'This week', value: 'this_week' }, { name: 'This month', value: 'this_month' }] },
     ],
   },
   {
@@ -141,7 +141,7 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
             `**${index + 1}.** ${row.display_name || row.displayName} — **${row.duration}**`);
           return interaction.reply({ content: `**Zenith Study VC Leaderboard**\n${lines.join('\n')}` });
         }
-        const period = interaction.options.getString('period') || 'all_time';
+        const period = interaction.options.getString('period') || 'this_month';
         const rows = await onLevel?.('leaderboard', period) || [];
         if (!rows.length) return interaction.reply({ content: 'No Zenith XP data yet.', ephemeral: true });
         const lines = rows.slice(0, 10).map((row, index) =>
