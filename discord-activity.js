@@ -77,13 +77,13 @@ async function recordGuildMessage(database, message, guildId) {
 async function getDiscordLeaderboard(database, guildId, period = 'all_time', now = new Date()) {
   const start = leaderboardWindowStart(period, now);
   const seasonKey = getSeasonKey(now);
-  const params = [guildId, seasonKey];
+  const params = [guildId];
   let messageExpression = 'u.season_message_count';
   let windowClause = '';
   if (start && period !== 'this_month') {
     messageExpression = 'COUNT(e.message_id)';
     windowClause = ' AND e.created_at >= ?';
-    params.push(start);
+    params.push(start, guildId, seasonKey);
   }
   return database.all(
     `SELECT u.discord_user_id AS id, u.username, u.display_name, u.avatar,
