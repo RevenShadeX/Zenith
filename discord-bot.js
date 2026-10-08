@@ -84,6 +84,7 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
       GatewayIntentBits.Guilds,
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.GuildMembers,
+      GatewayIntentBits.GuildVoiceStates,
     ],
     allowedMentions: { parse: [] },
   });
