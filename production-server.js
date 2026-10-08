@@ -261,7 +261,9 @@ async function getDailyGameState(discordUserId, dateKey = zenithDateKey()) {
   if (!daily) {
     let hash = 0;
     for (const character of dateKey) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-    const word = DAILY_WORDS[hash % DAILY_WORDS.length];
+    const digest = crypto.createHmac('sha256', SESSION_SECRET).update(dateKey).digest();
+    const seed = digest.readUInt32BE(0);
+    const word = DAILY_WORDS[seed % DAILY_WORDS.length];
     await database.run('INSERT OR IGNORE INTO daily_words (date_key, word) VALUES (?, ?)', [dateKey, word]);
     daily = await database.get('SELECT word FROM daily_words WHERE date_key = ?', [dateKey]);
   }
@@ -956,7 +958,7 @@ function createApp() {
   }));
 
   app.use('/css', express.static(path.join(__dirname, 'css'), { dotfiles: 'deny', fallthrough: false, maxAge: 0 }));
-  app.use('/js', express.static(path.join(__dirname, 'js'), { dotfiles: 'deny', fallthrough: false, maxAge: IS_PRODUCTION ? '1h' : 0 }));
+  app.use('/js', express.static(path.join(__dirname, 'js'), { dotfiles: 'deny', fallthrough: false, maxAge: 0 }));
   app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use((req, res) => res.status(404).send('Not found.'));
@@ -1049,7 +1051,7 @@ async function handleDiscordLevelCommand(target, userLike) {
   const user = await ensureDiscordUser(String(target), userLike || {});
   await ensureUserSeason(database, String(target));
   const current = await getUser(String(target));
-  return { displayName: current.display_name || current.username, xp: Number(current.season_xp || 0), level: Math.floor(Math.sqrt(Number(current.season_xp || 0) / 100)) + 1, messages: Number(current.season_message_count || 0) };
+  return { displayName: current.display_name || current.username, xp: Number(current.season_xp || 0), level: Math.floor(Math.sqrt(Number(current.season_xp || 0) / 120)) + 1, messages: Number(current.season_message_count || 0) };
 }
 
 async function handleStudyVoiceState(oldState, newState) {
