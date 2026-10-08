@@ -16,6 +16,7 @@ const { canJoinRoom, isRoomHost } = require('./room-policy');
 const { classifyMediaUrl } = require('./media');
 const { leaderboardWindowStart } = require('./leaderboard');
 const { getMissionState, claimMission } = require('./missions');
+const { checkAndUnlockBadges, getBadgesForUsers, getUserBadges } = require('./badges');
 const { getStudyLeaderboard, getStudyVcChannelId, setStudyVcChannelId, startStudySession, stopStudySession, flushStudySessions } = require('./study-vc');
 const { assertProductionConfig } = require('./production-config');
 
@@ -80,7 +81,7 @@ function sanitizeText(value, maxLength = 240) {
   return String(value || '').trim().slice(0, maxLength);
 }
 
-function toPublicUser(row, admin = false) {
+function toPublicUser(row, admin = false, badges = []) {
   if (!row) return null;
   return {
     id: row.discord_user_id,
@@ -98,6 +99,7 @@ function toPublicUser(row, admin = false) {
     musicNights: Number(row.music_nights || 0),
     gameWins: Number(row.game_wins || 0),
     currentStreak: Number(row.current_streak || 0),
+    badges,
     admin,
   };
 }
@@ -125,7 +127,8 @@ async function getPublicUser(discordUserId) {
       admin = false;
     }
   }
-  return toPublicUser(user, admin);
+  const badges = user ? await checkAndUnlockBadges(database, discordUserId) : [];
+  return toPublicUser(user, admin, badges);
 }
 
 async function upsertDiscordUser(profile) {
@@ -617,6 +620,11 @@ function createApp() {
     res.json({ user });
   }));
 
+  app.get('/api/badges', requireAuth, asyncRoute(async (req, res) => {
+    const badges = await checkAndUnlockBadges(database, req.session.discordUserId);
+    res.json({ badges });
+  }));
+
   app.get('/api/community/tracking', asyncRoute(async (req, res) => {
     res.json(await getTrackingInfo());
   }));
@@ -646,6 +654,8 @@ function createApp() {
       getStudyLeaderboard(database, process.env.DISCORD_GUILD_ID || 'unconfigured'),
       getTrackingInfo(),
     ]);
+    const badgeMap = await getBadgesForUsers(database, users.map((user) => user.id || user.discord_user_id));
+    for (const user of users) user.badges = (badgeMap.get(String(user.id || user.discord_user_id)) || []).slice(-3).reverse();
     const studyChannelId = await getStudyVcChannelId(database);
     res.json({ period, users, studyLeaderboard, studyChannelId, tracking, source: 'discord_message_events' });
   }));
