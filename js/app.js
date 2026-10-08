@@ -312,14 +312,32 @@ function renderGames() {
   `;
 }
 
+function getLocalDateTimeInputMin() {
+  const now = new Date();
+  const pad = (value) => String(value).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`;
+}
+
+function parseLocalDateTime(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(String(value || ''));
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const hour = Number(match[4]);
+  const minute = Number(match[5]);
+  const date = new Date(year, month - 1, day, hour, minute, 0, 0);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day || date.getHours() !== hour || date.getMinutes() !== minute) return null;
+  return date;
+}
+
 function renderEvents() {
   return `
     <section class="page-section page-heading"><span class="eyebrow">PUT IT ON THE CALENDAR</span><div class="heading-row"><div><h1>Plans worth keeping.</h1><p>Movie nights, game sessions, and whatever the community dreams up.</p></div><button class="button button-primary" type="button" data-action="toggle-event-form">Host an event <span aria-hidden="true">＋</span></button></div></section>
-    <section class="event-create-wrap is-hidden" id="eventCreateWrap">${state.user ? `<form id="createEventForm" class="form-grid event-form"><label>Event title<input name="title" maxlength="100" placeholder="Late-night double feature" required /></label><label>Type<select name="type"><option>COMMUNITY EVENT</option><option>MOVIE NIGHT</option><option>MUSIC NIGHT</option><option>GAME NIGHT</option></select></label><label class="form-wide">A little context<textarea name="description" maxlength="240" rows="2" placeholder="What should people know?"></textarea></label><label>Starts<input name="startTime" type="datetime-local" required /></label><button class="button button-primary" type="submit">Publish event ↗</button></form>` : signInPrompt('Sign in to host an event')}</section>
+    <section class="event-create-wrap is-hidden" id="eventCreateWrap">${state.user ? `<form id="createEventForm" class="form-grid event-form"><label>Event title<input name="title" maxlength="100" placeholder="Late-night double feature" required /></label><label>Type<select name="type"><option>COMMUNITY EVENT</option><option>MOVIE NIGHT</option><option>MUSIC NIGHT</option><option>GAME NIGHT</option></select></label><label class="form-wide">A little context<textarea name="description" maxlength="240" rows="2" placeholder="What should people know?"></textarea></label><label>Starts<input name="startTime" type="datetime-local" min="${getLocalDateTimeInputMin()}" step="60" required /></label><button class="button button-primary" type="submit">Publish event ↗</button></form>` : signInPrompt('Sign in to host an event')}</section>
     <section class="events-list">${state.events.length ? state.events.map(renderEventCard).join('') : '<div class="empty-state">No plans on the calendar yet. Host the first one.</div>'}</section>
   `;
 }
-
 function renderStatusPage() {
   const discordReady = state.status?.discordAuth === 'Configured' && state.status?.discordBot === 'Connected';
   const coreReady = ['website', 'api', 'websocket', 'database'].every((key) => state.status?.[key] === 'Operational');
@@ -731,8 +749,9 @@ async function handleSubmit(event) {
       else document.querySelector('#guessInput')?.focus();
     } else if (form.id === 'createEventForm') {
       const data = new FormData(form);
-      const startTime = new Date(data.get('startTime'));
-      if (Number.isNaN(startTime.getTime())) throw new Error('Choose a valid start time.');
+      const startTime = parseLocalDateTime(data.get('startTime'));
+      if (!startTime) throw new Error('Choose a valid start date and time.');
+      if (startTime.getTime() <= Date.now()) throw new Error('Choose a future date and time.');
       const { event: created } = await fetchJson('/api/events', {
         method: 'POST',
         body: JSON.stringify({
