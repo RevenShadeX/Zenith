@@ -957,7 +957,14 @@ function createApp() {
 
   app.use('/css', express.static(path.join(__dirname, 'css'), { dotfiles: 'deny', fallthrough: false, maxAge: 0 }));
   app.use('/js', express.static(path.join(__dirname, 'js'), { dotfiles: 'deny', fallthrough: false, maxAge: 0 }));
-  app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+  app.get('/', (req, res) => {
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
+    });
+    res.sendFile(path.join(__dirname, 'index.html'));
+  });
   app.use('/api', (req, res) => res.status(404).json({ error: 'Endpoint not found.' }));
   app.use((req, res) => res.status(404).send('Not found.'));
   app.use((error, req, res, next) => {
