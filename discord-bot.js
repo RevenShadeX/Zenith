@@ -1,6 +1,6 @@
 'use strict';
 
-const { Client, Events, GatewayIntentBits, PermissionFlagsBits, ApplicationCommandOptionType } = require('discord.js');
+const { Client, Events, GatewayIntentBits, PermissionFlagsBits, ApplicationCommandOptionType, ChannelType } = require('discord.js');
 
 const COMMANDS = [
   {
@@ -9,7 +9,24 @@ const COMMANDS = [
   },
   {
     name: 'leaderboard',
-    description: 'Show the Zenith XP leaderboard',
+    description: 'Show a Zenith leaderboard',
+    options: [
+      { name: 'type', description: 'Leaderboard to show', type: ApplicationCommandOptionType.String, required: false, choices: [{ name: 'XP / activity', value: 'xp' }, { name: 'Study VC time', value: 'study_vc' }] },
+      { name: 'period', description: 'Time period for the XP leaderboard', type: ApplicationCommandOptionType.String, required: false, choices: [{ name: 'Today', value: 'today' }, { name: 'This week', value: 'this_week' }, { name: 'This month', value: 'this_month' }, { name: 'All time', value: 'all_time' }] },
+    ],
+  },
+  {
+    name: 'set',
+    description: 'Configure Zenith server settings',
+    options: [{
+      name: 'leaderboard',
+      description: 'Configure a leaderboard',
+      type: ApplicationCommandOptionType.Subcommand,
+      options: [
+        { name: 'type', description: 'Leaderboard to configure', type: ApplicationCommandOptionType.String, required: true, choices: [{ name: 'Study VC', value: 'study_vc' }] },
+        { name: 'channel', description: 'Voice channel to track as the study room', type: ApplicationCommandOptionType.Channel, required: true, channel_types: [ChannelType.GuildVoice, ChannelType.GuildStageVoice] },
+      ],
+    }],
   },
   {
     name: 'event',
@@ -61,7 +78,7 @@ function isTrackableMessage(message, guildId) {
   );
 }
 
-function createDiscordBot({ token, guildId, onMessage, onReady, onError = console.error, onLevel, onEventCommand }) {
+function createDiscordBot({ token, guildId, onMessage, onReady, onError = console.error, onLevel, onEventCommand, onLeaderboardConfig, onVoiceStateUpdate }) {
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
@@ -99,6 +116,10 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
     Promise.resolve(onMessage(message)).catch(onError);
   });
 
+  client.on(Events.VoiceStateUpdate, (oldState, newState) => {
+    if (oldState.guild?.id !== guildId && newState.guild?.id !== guildId) return;
+    Promise.resolve(onVoiceStateUpdate?.(oldState, newState)).catch(onError);
+  });
   client.on(Events.InteractionCreate, (interaction) => {
     if (!interaction.isChatInputCommand()) return;
     Promise.resolve((async () => {
