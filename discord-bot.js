@@ -97,7 +97,15 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
     if (!guild || !badge?.name) return false;
     try {
       let role = guild.roles.cache.find((item) => item.name === badge.name);
-      if (!role) role = await guild.roles.create({ name: badge.name, reason: 'Zenith badge' });
+      if (!role) {
+        const rolePromise = badgeRolePromises.get(badge.name) || guild.roles.create({ name: badge.name, reason: 'Zenith badge' });
+        badgeRolePromises.set(badge.name, rolePromise);
+        try {
+          role = await rolePromise;
+        } finally {
+          badgeRolePromises.delete(badge.name);
+        }
+      }
       const member = await guild.members.fetch(String(discordUserId));
       if (!member.roles.cache.has(role.id)) await member.roles.add(role, 'Zenith badge earned');
       return true;
