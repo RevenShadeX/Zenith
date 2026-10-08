@@ -185,10 +185,19 @@ async function recordDiscordMessage(message) {
 
 async function getTrackingInfo() {
   const setting = await database.get('SELECT setting_value FROM app_settings WHERE setting_key = ?', [trackingDateKey()]);
+  let memberCount = null;
+  if (discordBot?.getMemberCount) {
+    try {
+      memberCount = await discordBot.getMemberCount();
+    } catch {
+      memberCount = null;
+    }
+  }
   return {
     trackingStartedAt: setting?.setting_value || null,
     historicalMessageCount: null,
     historicalImported: false,
+    memberCount,
     messageScope: 'Messages tracked by the Zenith bot after its installation and first connection.',
     historicalScope: 'Historical Discord messages are not imported or included.',
   };
