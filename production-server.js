@@ -15,6 +15,7 @@ const { getDiscordLeaderboard, recordGuildMessage } = require('./discord-activit
 const { canJoinRoom, isRoomHost } = require('./room-policy');
 const { classifyMediaUrl } = require('./media');
 const { leaderboardWindowStart } = require('./leaderboard');
+const { getMissionState, claimMission } = require('./missions');
 const { assertProductionConfig } = require('./production-config');
 
 dotenv.config();
@@ -617,6 +618,24 @@ function createApp() {
   app.get('/api/community/tracking', asyncRoute(async (req, res) => {
     res.json(await getTrackingInfo());
   }));
+  app.get('/api/missions', requireAuth, asyncRoute(async (req, res) => {
+    res.json(await getMissionState(database, req.session.discordUserId));
+  }));
+
+  app.post('/api/missions/:id/claim', requireSameOrigin, requireAuth, asyncRoute(async (req, res) => {
+    const periodKey = String(req.body?.periodKey || '');
+    if (!periodKey) return res.status(400).json({ error: 'Mission period is required.' });
+    try {
+      const reward = await claimMission(database, req.session.discordUserId, String(req.params.id), periodKey);
+      const user = await getPublicUser(req.session.discordUserId);
+      res.json({ ok: true, reward, user, missions: await getMissionState(database, req.session.discordUserId) });
+    } catch (error) {
+      const status = /not found|expired/i.test(error.message) ? 404 : /already been claimed/i.test(error.message) ? 409 : 400;
+      res.status(status).json({ error: error.message });
+    }
+  }));
+
+
 
   app.get('/api/community/leaderboard', asyncRoute(async (req, res) => {
     const period = String(req.query.period || 'all_time');
