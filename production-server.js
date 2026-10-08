@@ -104,6 +104,7 @@ function toPublicUser(row, admin = false, badges = []) {
     gameWins: Number(row.game_wins || 0),
     currentStreak: Number(row.current_streak || 0),
     badges,
+    seasonKey: row.season_key || getSeasonKey(),
     admin,
   };
 }
@@ -628,7 +629,15 @@ function createApp() {
 
   app.get('/api/badges', requireAuth, asyncRoute(async (req, res) => {
     const badges = await checkAndUnlockBadges(database, req.session.discordUserId);
-    res.json({ badges });
+    res.json({ season: getSeasonKey(), badges });
+  }));
+
+  app.get('/api/seasons/history', requireAuth, asyncRoute(async (req, res) => {
+    const history = await database.all(
+      'SELECT season_key, xp, points, messages, level, study_seconds, badge_count, archived_at FROM season_history WHERE discord_user_id = ? ORDER BY season_key DESC LIMIT 24',
+      [req.session.discordUserId]
+    );
+    res.json({ currentSeason: getSeasonKey(), history });
   }));
 
   app.get('/api/community/tracking', asyncRoute(async (req, res) => {
