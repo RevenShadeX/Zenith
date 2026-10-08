@@ -37,7 +37,7 @@ async function recordGuildMessage(database, message, guildId) {
 
   const processedAt = Date.now();
   const messageTime = new Date(createdAt).getTime();
-  const xpWindowStart = new Date(processedAt - 60_000).toISOString();
+  const xpWindowStart = new Date(processedAt - 75_000).toISOString();
 
   await database.run(
     `UPDATE users SET tracked_message_count = tracked_message_count + 1,
@@ -63,9 +63,9 @@ async function recordGuildMessage(database, message, guildId) {
       'SELECT xp, season_xp FROM users WHERE discord_user_id = ?',
       [discordUserId]
     );
-    const newXp = Number(userState?.xp || 0) + 15;
-    const newSeasonXp = Number(userState?.season_xp || 0) + 15;
-    const newLevel = Math.floor(Math.sqrt(newSeasonXp / 100)) + 1;
+    const newXp = Number(userState?.xp || 0) + 12;
+    const newSeasonXp = Number(userState?.season_xp || 0) + 12;
+    const newLevel = Math.floor(Math.sqrt(newSeasonXp / 120)) + 1;
     await database.run(
       'UPDATE users SET xp = ?, season_xp = ?, level = ?, updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?',
       [newXp, newSeasonXp, newLevel, discordUserId]
