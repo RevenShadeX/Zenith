@@ -209,7 +209,7 @@ async function refreshCommunityMissions() {
 }
 
 function renderCommunityMissions() {
-  if (!state.user || !state.communityMissions) return '';
+  if (!state.communityMissions) return '';
   const groups = [['DAILY', state.communityMissions.daily || []], ['WEEKLY', state.communityMissions.weekly || []]];
   const cards = groups.flatMap(([label, missions]) => missions.map((mission) => {
     const members = mission.members || [];
