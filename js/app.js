@@ -333,16 +333,14 @@ function renderHome() {
 }
 
 function renderRooms() {
+  const canCreateRoom = Boolean(state.user?.owner);
   return `
-    <section class="page-section page-heading"><span class="eyebrow">PICK YOUR CORNER</span><div class="heading-row"><div><h1>Open rooms</h1><p>Somewhere to watch, listen, or just be around people.</p></div><button class="button button-primary" type="button" data-action="focus-room-form">Create a room <span aria-hidden="true">＋</span></button></div></section>
+    <section class="page-section page-heading"><span class="eyebrow">PICK YOUR CORNER</span><div class="heading-row"><div><h1>Open rooms</h1><p>Somewhere to watch, listen, or just be around people.</p></div>${canCreateRoom ? '<button class="button button-primary" type="button" data-action="focus-room-form">Create a room <span aria-hidden="true">＋</span></button>' : ''}</div></section>
     <section class="room-tools"><label class="search-field"><span aria-hidden="true">⌕</span><input id="roomSearch" type="search" placeholder="Find a room" aria-label="Search rooms" /></label><span class="room-count"><span class="status-dot"></span>${state.rooms.length} LIVE</span></section>
     <section class="room-grid room-grid-page" id="roomGrid">${state.rooms.length ? state.rooms.map(renderRoomCard).join('') : '<div class="empty-state">No rooms available. Create the first one.</div>'}</section>
-    <section class="create-room-section" id="createRoomSection"><div class="create-room-copy"><span class="eyebrow">MAKE IT YOURS</span><h2>Start a watch party</h2><p>Bring your people and a direct video link. You can host the room right away.</p></div>
-      ${state.user ? `<form id="createRoomForm" class="form-grid"><label>Room name<input name="name" type="text" maxlength="80" placeholder="Friday night comfort movie" required /></label><label>Media source<input name="mediaUrl" type="url" placeholder="Direct video, YouTube, or Vimeo URL" required /></label><button class="button button-primary" type="submit">Open room <span aria-hidden="true">↗</span></button></form>` : signInPrompt('Sign in to host a room')}
-    </section>
+    <section class="create-room-section" id="createRoomSection">${canCreateRoom ? '<div class="create-room-copy"><span class="eyebrow">MAKE IT YOURS</span><h2>Start a watch party</h2><p>Bring your people and a direct video link. You can host the room right away.</p></div><form id="createRoomForm" class="form-grid"><label>Room name<input name="name" type="text" maxlength="80" placeholder="Friday night comfort movie" required /></label><label>Media source<input name="mediaUrl" type="url" placeholder="Direct video, YouTube, or Vimeo URL" required /></label><button class="button button-primary" type="submit">Open room <span aria-hidden="true">↗</span></button></form>' : '<div class="create-room-copy"><span class="eyebrow">WATCH PARTIES</span><h2>Join a room</h2><p>Watch parties are hosted by the server owner. Pick an open room above to join.</p></div>'}</section>
   `;
 }
-
 function renderWatch() {
   const room = state.rooms.find((entry) => entry.id === state.roomId);
   if (!room) return `<section class="page-section watch-empty"><span class="eyebrow">WATCH TOGETHER</span><h1>Choose a room.</h1><p>Pick a live room and settle in.</p><div class="room-grid">${state.rooms.map(renderRoomCard).join('')}</div></section>`;
