@@ -644,3 +644,31 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .community-missions-grid { grid-template-columns: 1fr; }
   .mission-reward { font-size: 8px; }
 }
+
+
+.server-member-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: 0.7rem;
+  padding-left: 0.7rem;
+  border-left: 1px solid rgba(255,255,255,0.12);
+  font-size: 0.68rem;
+  letter-spacing: 0.09em;
+  color: var(--muted, #8d8d8d);
+  white-space: nowrap;
+}
+
+.server-member-dot {
+  width: 0.42rem;
+  height: 0.42rem;
+  border-radius: 50%;
+  background: currentColor;
+  box-shadow: 0 0 8px currentColor;
+}
+
+@media (max-width: 720px) {
+  .server-member-count {
+    display: none;
+  }
+}
