@@ -91,6 +91,7 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
 
   let guild = null;
   const inviteState = new Map();
+  const badgeRolePromises = new Map();
 
   async function refreshInvites() {
     if (!guild) return;
