@@ -7,7 +7,7 @@ const state = {
   studyLeaderboard: [],
   studyChannelId: '',
   tracking: null,
-  leaderboardPeriod: 'all_time',
+  leaderboardPeriod: 'this_month',
   latestMessages: [],
   messages: [],
   status: null,
@@ -346,15 +346,14 @@ function renderCommunity() {
     ['today', 'Today'],
     ['this_week', 'This week'],
     ['this_month', 'This month'],
-    ['all_time', 'All time'],
   ];
   const trackedSince = state.tracking?.trackingStartedAt
     ? new Date(state.tracking.trackingStartedAt).toLocaleDateString(undefined, { dateStyle: 'long', timeZone: 'UTC' })
     : 'Waiting for the bot to connect';
   return `
-    <section class="page-section page-heading"><span class="eyebrow">ACTIVITY FROM YOUR DISCORD SERVER</span><div class="heading-row"><div><h1>Most active</h1><p>Counts come from human messages observed by the Zenith bot.</p></div><div class="community-total"><strong>${users.length.toString().padStart(2, '0')}</strong><span>MEMBERS<br />IN THIS PERIOD</span></div></div></section>
-    ${state.user ? `<section class="profile-summary"><img class="profile-avatar" src="${escapeHtml(state.user.avatar)}" alt="" /><div class="profile-identity"><span class="eyebrow">YOUR DISCORD PROFILE</span><h2>${escapeHtml(state.user.displayName || state.user.username)}</h2><span>Discord member · ${Number(state.user.trackedMessageCount || 0).toLocaleString()} tracked messages</span><div class="profile-badges">${renderBadges(state.user.badges || [], 8)}</div></div><div class="profile-stat"><strong>${Number(state.user.trackedMessageCount || 0).toLocaleString()}</strong><span>TRACKED HERE</span></div></section>${renderMissions()}` : ''}
-    <section class="leaderboard-section"><div class="section-header"><div><span class="eyebrow">MOST ACTIVE</span><h2>Discord message leaderboard</h2></div><label class="search-field compact-search"><span aria-hidden="true">⌕</span><input id="communitySearch" type="search" placeholder="Find a member" aria-label="Search members" /></label></div><div class="period-tabs" role="group" aria-label="Leaderboard period">${periods.map(([period, label]) => `<button type="button" data-period="${period}" class="${state.leaderboardPeriod === period ? 'is-active' : ''}">${label}</button>`).join('')}</div><div class="member-list leaderboard-list" id="leaderboardList">${renderLeaderboard(users)}</div><p class="tracking-note">Tracked by Zenith since <strong>${escapeHtml(trackedSince)}</strong>. These are not historical Discord message totals.</p></section>
+    <section class="page-section page-heading"><span class="eyebrow">ACTIVITY FROM YOUR DISCORD SERVER</span><div class="heading-row"><div><h1>Most active</h1><p>Monthly competition. XP, points, and badges reset at the start of each month.</p></div><div class="community-total"><strong>${users.length.toString().padStart(2, '0')}</strong><span>MEMBERS<br />IN THIS PERIOD</span></div></div></section>
+    ${state.user ? `<section class="profile-summary"><img class="profile-avatar" src="${escapeHtml(state.user.avatar)}" alt="" /><div class="profile-identity"><span class="eyebrow">YOUR DISCORD PROFILE</span><h2>${escapeHtml(state.user.displayName || state.user.username)}</h2><span>Discord member · ${Number(state.user.trackedMessageCount || 0).toLocaleString()} messages this month</span><div class="profile-badges">${renderBadges(state.user.badges || [], 8)}</div></div><div class="profile-stat"><strong>${Number(state.user.trackedMessageCount || 0).toLocaleString()}</strong><span>TRACKED HERE</span></div></section>${renderMissions()}` : ''}
+    <section class="leaderboard-section"><div class="section-header"><div><span class="eyebrow">MOST ACTIVE</span><h2>Discord message leaderboard</h2></div><label class="search-field compact-search"><span aria-hidden="true">⌕</span><input id="communitySearch" type="search" placeholder="Find a member" aria-label="Search members" /></label></div><div class="period-tabs" role="group" aria-label="Leaderboard period">${periods.map(([period, label]) => `<button type="button" data-period="${period}" class="${state.leaderboardPeriod === period ? 'is-active' : ''}">${label}</button>`).join('')}</div><div class="member-list leaderboard-list" id="leaderboardList">${renderLeaderboard(users)}</div><p class="tracking-note">Current monthly season · tracked by Zenith since <strong>${escapeHtml(trackedSince)}</strong>. Lifetime totals are kept separately.</p></section>
     <section class="leaderboard-section study-leaderboard-section"><div class="section-header"><div><span class="eyebrow">FOCUS MODE</span><h2>Study VC leaderboard</h2></div><span class="tracking-note">${state.studyChannelId ? 'Time spent in the configured study voice channel.' : 'No study voice channel configured yet.'}</span></div><div class="member-list leaderboard-list">${renderStudyLeaderboard(state.studyLeaderboard)}</div></section>
     <section class="historical-note"><div><span class="eyebrow">SEPARATE FROM LIVE TRACKING</span><h2>Historical Discord messages</h2><p>${escapeHtml(state.tracking?.historicalScope || 'Historical messages are not imported or included in this leaderboard.')}</p></div><strong>Not imported</strong></section>
   `;
