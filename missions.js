@@ -81,10 +81,10 @@ async function getMetricProgress(database, userId, mission, now = new Date()) {
   }
 
   if (mission.metric === 'event_joins') {
-    const row = await database.get(
-      'SELECT COUNT(*) AS count FROM event_participants WHERE discord_user_id = ? AND joined_at >= ? AND joined_at < ?',
-      [userId, start, end]
-    );
+    const query = database.isPostgres
+      ? 'SELECT COUNT(*) AS count FROM event_participants WHERE discord_user_id = ? AND joined_at >= ? AND joined_at < ?'
+      : 'SELECT COUNT(*) AS count FROM event_participants WHERE discord_user_id = ? AND datetime(joined_at) >= datetime(?) AND datetime(joined_at) < datetime(?)';
+    const row = await database.get(query, [userId, start, end]);
     return Number(row?.count || 0);
   }
 
