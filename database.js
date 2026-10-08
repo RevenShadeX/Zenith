@@ -188,6 +188,15 @@ function createDatabase(options = {}) {
         guesses_json TEXT NOT NULL DEFAULT '[]',
         PRIMARY KEY (date_key, discord_user_id)
       )`,
+      CREATE TABLE IF NOT EXISTS mission_claims (
+        mission_id TEXT NOT NULL,
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        period_key TEXT NOT NULL,
+        xp_reward INTEGER NOT NULL DEFAULT 0,
+        points_reward INTEGER NOT NULL DEFAULT 0,
+        claimed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (mission_id, discord_user_id, period_key)
+      ),
     ];
     for (const statement of statements) await run(statement);
 
@@ -379,6 +388,15 @@ function createDatabase(options = {}) {
         solved BOOLEAN NOT NULL DEFAULT FALSE,
         guesses_json TEXT NOT NULL DEFAULT '[]',
         PRIMARY KEY (date_key, discord_user_id)
+      )`,
+      `CREATE TABLE IF NOT EXISTS mission_claims (
+        mission_id TEXT NOT NULL,
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        period_key TEXT NOT NULL,
+        xp_reward INTEGER NOT NULL DEFAULT 0,
+        points_reward INTEGER NOT NULL DEFAULT 0,
+        claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (mission_id, discord_user_id, period_key)
       )`,
       'CREATE INDEX IF NOT EXISTS idx_discord_events_guild_created ON discord_message_events (guild_id, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_discord_events_author_created ON discord_message_events (author_discord_user_id, created_at)',
