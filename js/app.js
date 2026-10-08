@@ -221,13 +221,23 @@ function renderRoomCard(room, index = 0) {
   `;
 }
 
+function renderBadges(badges = [], limit = badges.length) {
+  if (!badges.length) return '<span class="badge-empty">No badges yet</span>';
+  return badges.slice(0, limit).map((badge) => `
+    <span class="achievement-badge rarity-${escapeHtml(badge.rarity || 'common')}" title="${escapeHtml(badge.description || badge.name)}">
+      <span class="achievement-badge-icon">${escapeHtml(badge.icon || '★')}</span>
+      <span>${escapeHtml(badge.name)}</span>
+    </span>
+  `).join('');
+}
+
 function renderLeaderboard(users = state.leaderboard, limit = users.length) {
   if (!users.length) return '<div class="empty-state">No community members to show yet.</div>';
   return users.slice(0, limit).map((user, index) => `
     <article class="member-row">
       <span class="rank-number">${String(index + 1).padStart(2, '0')}</span>
       <img class="avatar member-avatar" src="${escapeHtml(user.avatar || 'https://api.dicebear.com/7.x/adventurer/svg?seed=member')}" alt="" />
-      <span class="member-name">${escapeHtml(user.display_name || user.username || 'Member')}${user.id === state.user?.id ? '<small>YOU</small>' : ''}</span>
+      <span class="member-name">${escapeHtml(user.display_name || user.username || 'Member')}${user.id === state.user?.id ? '<small>YOU</small>' : ''}${renderBadges(user.badges || [], 2)}</span>
       <span class="member-points">LEVEL ${Number(user.level || 1)} · ${Number(user.xp || 0).toLocaleString()} <small>XP</small></span>
     </article>
   `).join('');
@@ -343,7 +353,7 @@ function renderCommunity() {
     : 'Waiting for the bot to connect';
   return `
     <section class="page-section page-heading"><span class="eyebrow">ACTIVITY FROM YOUR DISCORD SERVER</span><div class="heading-row"><div><h1>Most active</h1><p>Counts come from human messages observed by the Zenith bot.</p></div><div class="community-total"><strong>${users.length.toString().padStart(2, '0')}</strong><span>MEMBERS<br />IN THIS PERIOD</span></div></div></section>
-    ${state.user ? `<section class="profile-summary"><img class="profile-avatar" src="${escapeHtml(state.user.avatar)}" alt="" /><div class="profile-identity"><span class="eyebrow">YOUR DISCORD PROFILE</span><h2>${escapeHtml(state.user.displayName || state.user.username)}</h2><span>Discord member · ${Number(state.user.trackedMessageCount || 0).toLocaleString()} tracked messages</span></div><div class="profile-stat"><strong>${Number(state.user.trackedMessageCount || 0).toLocaleString()}</strong><span>TRACKED HERE</span></div></section>${renderMissions()}` : ''}
+    ${state.user ? `<section class="profile-summary"><img class="profile-avatar" src="${escapeHtml(state.user.avatar)}" alt="" /><div class="profile-identity"><span class="eyebrow">YOUR DISCORD PROFILE</span><h2>${escapeHtml(state.user.displayName || state.user.username)}</h2><span>Discord member · ${Number(state.user.trackedMessageCount || 0).toLocaleString()} tracked messages</span><div class="profile-badges">${renderBadges(state.user.badges || [], 8)}</div></div><div class="profile-stat"><strong>${Number(state.user.trackedMessageCount || 0).toLocaleString()}</strong><span>TRACKED HERE</span></div></section>${renderMissions()}` : ''}
     <section class="leaderboard-section"><div class="section-header"><div><span class="eyebrow">MOST ACTIVE</span><h2>Discord message leaderboard</h2></div><label class="search-field compact-search"><span aria-hidden="true">⌕</span><input id="communitySearch" type="search" placeholder="Find a member" aria-label="Search members" /></label></div><div class="period-tabs" role="group" aria-label="Leaderboard period">${periods.map(([period, label]) => `<button type="button" data-period="${period}" class="${state.leaderboardPeriod === period ? 'is-active' : ''}">${label}</button>`).join('')}</div><div class="member-list leaderboard-list" id="leaderboardList">${renderLeaderboard(users)}</div><p class="tracking-note">Tracked by Zenith since <strong>${escapeHtml(trackedSince)}</strong>. These are not historical Discord message totals.</p></section>
     <section class="leaderboard-section study-leaderboard-section"><div class="section-header"><div><span class="eyebrow">FOCUS MODE</span><h2>Study VC leaderboard</h2></div><span class="tracking-note">${state.studyChannelId ? 'Time spent in the configured study voice channel.' : 'No study voice channel configured yet.'}</span></div><div class="member-list leaderboard-list">${renderStudyLeaderboard(state.studyLeaderboard)}</div></section>
     <section class="historical-note"><div><span class="eyebrow">SEPARATE FROM LIVE TRACKING</span><h2>Historical Discord messages</h2><p>${escapeHtml(state.tracking?.historicalScope || 'Historical messages are not imported or included in this leaderboard.')}</p></div><strong>Not imported</strong></section>
