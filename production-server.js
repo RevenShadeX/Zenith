@@ -103,6 +103,7 @@ function toPublicUser(row, admin = false, badges = []) {
     musicNights: Number(row.music_nights || 0),
     gameWins: Number(row.game_wins || 0),
     currentStreak: Number(row.current_streak || 0),
+    inviteCount: Number(row.invite_count || 0),
     badges,
     seasonKey: row.season_key || getSeasonKey(),
     admin,
@@ -119,7 +120,17 @@ function discordAvatar(profile) {
 }
 
 async function getUser(discordUserId) {
-  return database.get('SELECT * FROM users WHERE discord_user_id = ?', [discordUserId]);
+  return database.get(
+    `SELECT u.*, (
+       SELECT COUNT(*)
+       FROM discord_invite_uses i
+       WHERE i.inviter_discord_user_id = u.discord_user_id
+         AND i.guild_id = u.guild_id
+     ) AS invite_count
+     FROM users u
+     WHERE u.discord_user_id = ?`,
+    [discordUserId]
+  );
 }
 
 async function checkAndSyncBadges(discordUserId, now = new Date()) {
