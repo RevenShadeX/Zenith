@@ -94,6 +94,7 @@ async function getMetricProgress(database, userId, mission, now = new Date()) {
 }
 
 async function getMissionState(database, userId, now = new Date()) {
+  await ensureUserSeason(database, userId, now);
   const missions = [...DAILY_MISSIONS, ...WEEKLY_MISSIONS];
   const claims = await database.all(
     'SELECT mission_id, period_key FROM mission_claims WHERE discord_user_id = ?',
