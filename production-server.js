@@ -663,7 +663,7 @@ function createApp() {
 
 
   app.get('/api/community/leaderboard', asyncRoute(async (req, res) => {
-    const period = String(req.query.period || 'all_time');
+    const period = String(req.query.period || 'this_month');
     const [users, studyLeaderboard, tracking] = await Promise.all([
       getMessageLeaderboard(period),
       getStudyLeaderboard(database, process.env.DISCORD_GUILD_ID || 'unconfigured'),
@@ -687,7 +687,7 @@ function createApp() {
     const [rooms, events, leaderboard, status, tracking] = await Promise.all([
       database.all("SELECT r.*, u.display_name AS host_display_name, u.avatar AS host_avatar FROM rooms r LEFT JOIN users u ON u.discord_user_id = r.host_user_id WHERE r.status = 'live' AND (r.locked = FALSE OR r.host_user_id = ? OR EXISTS (SELECT 1 FROM room_members rm WHERE rm.room_id = r.id AND rm.discord_user_id = ?)) ORDER BY r.created_at DESC LIMIT 8", [viewerId, viewerId]),
       database.all("SELECT * FROM events WHERE status = 'upcoming' AND end_time > ? ORDER BY start_time ASC LIMIT 8", [new Date().toISOString()]),
-      getMessageLeaderboard('all_time'),
+      getMessageLeaderboard('this_month'),
       fetchStatus(),
       getTrackingInfo(),
     ]);
