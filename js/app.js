@@ -658,6 +658,26 @@ async function handleClick(event) {
   if (!control) return;
   const action = control.dataset.action;
 
+  if (action === 'claim-mission') {
+    control.disabled = true;
+    try {
+      const { user, missions } = await fetchJson(\`/api/missions/\${encodeURIComponent(control.dataset.missionId)}/claim\`, {
+        method: 'POST',
+        body: JSON.stringify({ periodKey: control.dataset.periodKey }),
+      });
+      state.user = user || state.user;
+      state.missions = missions || state.missions;
+      renderTopbar();
+      renderApp();
+      showToast('Mission reward claimed.', 'success');
+    } catch (error) {
+      control.disabled = false;
+      showToast(error.message, 'error');
+      await refreshMissions();
+      renderApp();
+    }
+    return;
+  }
   if (action === 'toggle-nav') {
     const open = topbarEl.querySelector('.nav')?.classList.toggle('is-open');
     control.setAttribute('aria-expanded', String(Boolean(open)));
