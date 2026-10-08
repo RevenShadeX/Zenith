@@ -78,7 +78,7 @@ function isTrackableMessage(message, guildId) {
   );
 }
 
-function createDiscordBot({ token, guildId, onMessage, onReady, onError = console.error, onLevel, onEventCommand, onLeaderboardConfig, onVoiceStateUpdate }) {
+function createDiscordBot({ token, guildId, onMessage, onReady, onError = console.error, onLevel, onEventCommand, onLeaderboardConfig, onVoiceStateUpdate, onMemberJoin, onInviteCreate }) {
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
@@ -90,6 +90,46 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
   });
 
   let guild = null;
+  const inviteState = new Map();
+
+  async function refreshInvites() {
+    if (!guild) return;
+    try {
+      const invites = await guild.invites.fetch();
+      inviteState.clear();
+      for (const invite of invites.values()) {
+        inviteState.set(invite.code, {
+          uses: Number(invite.uses || 0),
+          inviterId: invite.inviter?.id ? String(invite.inviter.id) : null,
+        });
+      }
+    } catch (error) {
+      onError(new Error(`Discord invite tracking unavailable: ${error.message}`));
+    }
+  }
+
+  async function detectInviteForMember(member) {
+    if (!guild || member.guild?.id !== guildId) return null;
+    try {
+      const invites = await guild.invites.fetch();
+      let match = null;
+      for (const invite of invites.values()) {
+        const previous = inviteState.get(invite.code);
+        const currentUses = Number(invite.uses || 0);
+        const inviterId = invite.inviter?.id ? String(invite.inviter.id) : previous?.inviterId || null;
+        if (previous && currentUses > previous.uses && inviterId) {
+          if (!match || currentUses - previous.uses > match.delta) {
+            match = { code: invite.code, inviterId, delta: currentUses - previous.uses };
+          }
+        }
+        inviteState.set(invite.code, { uses: currentUses, inviterId });
+      }
+      return match;
+    } catch (error) {
+      onError(new Error(`Discord invite attribution failed: ${error.message}`));
+      return null;
+    }
+  }
   let resolveReady;
   let rejectReady;
   const readyEvent = new Promise((resolve, reject) => {
@@ -106,6 +146,7 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
         onError(new Error(`Discord slash-command registration failed: ${error.message}`));
       }
       await onReady?.(guild);
+      await refreshInvites();
       resolveReady(guild);
     } catch (error) {
       rejectReady(error);
@@ -115,6 +156,27 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
   client.on(Events.MessageCreate, (message) => {
     if (!isTrackableMessage(message, guildId)) return;
     Promise.resolve(onMessage(message)).catch(onError);
+  });
+
+  client.on(Events.GuildInviteCreate, (invite) => {
+    if (invite.guild?.id !== guildId) return;
+    inviteState.set(invite.code, {
+      uses: Number(invite.uses || 0),
+      inviterId: invite.inviter?.id ? String(invite.inviter.id) : null,
+    });
+    Promise.resolve(onInviteCreate?.(invite)).catch(onError);
+  });
+
+  client.on(Events.GuildInviteDelete, (invite) => {
+    if (invite.guild?.id !== guildId) return;
+    inviteState.delete(invite.code);
+  });
+
+  client.on(Events.GuildMemberAdd, (member) => {
+    if (member.guild?.id !== guildId || member.user?.bot) return;
+    Promise.resolve(detectInviteForMember(member))
+      .then((invite) => onMemberJoin?.(member, invite))
+      .catch(onError);
   });
 
   client.on(Events.VoiceStateUpdate, (oldState, newState) => {
