@@ -158,7 +158,7 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
     Promise.resolve(onMessage(message)).catch(onError);
   });
 
-  client.on(Events.GuildInviteCreate, (invite) => {
+  client.on(Events.InviteCreate, (invite) => {
     if (invite.guild?.id !== guildId) return;
     inviteState.set(invite.code, {
       uses: Number(invite.uses || 0),
@@ -167,7 +167,7 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
     Promise.resolve(onInviteCreate?.(invite)).catch(onError);
   });
 
-  client.on(Events.GuildInviteDelete, (invite) => {
+  client.on(Events.InviteDelete, (invite) => {
     if (invite.guild?.id !== guildId) return;
     inviteState.delete(invite.code);
   });
