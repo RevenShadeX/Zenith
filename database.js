@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('path');
+const { getSeasonKey } = require('./season');
 
 function createDatabase(options = {}) {
   const databaseUrl = options.databaseUrl ?? process.env.DATABASE_URL ?? '';
@@ -106,6 +107,10 @@ function createDatabase(options = {}) {
         music_nights INTEGER NOT NULL DEFAULT 0,
         game_wins INTEGER NOT NULL DEFAULT 0,
         current_streak INTEGER NOT NULL DEFAULT 0,
+        season_key TEXT,
+        season_xp INTEGER NOT NULL DEFAULT 0,
+        season_points INTEGER NOT NULL DEFAULT 0,
+        season_message_count INTEGER NOT NULL DEFAULT 0,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`);
@@ -212,11 +217,42 @@ function createDatabase(options = {}) {
         unlocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (badge_id, discord_user_id)
       )`,
+      `CREATE TABLE IF NOT EXISTS season_badges (
+        badge_id TEXT NOT NULL,
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        season_key TEXT NOT NULL,
+        unlocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (badge_id, discord_user_id, season_key)
+      )`,
+      `CREATE TABLE IF NOT EXISTS season_study_vc_time (
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        season_key TEXT NOT NULL,
+        seconds INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (discord_user_id, season_key)
+      )`,
+      `CREATE TABLE IF NOT EXISTS season_history (
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        season_key TEXT NOT NULL,
+        xp INTEGER NOT NULL DEFAULT 0,
+        points INTEGER NOT NULL DEFAULT 0,
+        messages INTEGER NOT NULL DEFAULT 0,
+        level INTEGER NOT NULL DEFAULT 1,
+        study_seconds INTEGER NOT NULL DEFAULT 0,
+        badge_count INTEGER NOT NULL DEFAULT 0,
+        archived_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (discord_user_id, season_key)
+      )`,
     ];
     for (const statement of statements) await run(statement);
 
     const userColumns = await all('PRAGMA table_info(users)');
-    if (!userColumns.some((column) => column.name === 'last_xp_at')) await run('ALTER TABLE users ADD COLUMN last_xp_at TEXT');
+    const existingUserColumns = new Set(userColumns.map((column) => column.name));
+    if (!existingUserColumns.has('last_xp_at')) await run('ALTER TABLE users ADD COLUMN last_xp_at TEXT');
+    if (!existingUserColumns.has('season_key')) await run('ALTER TABLE users ADD COLUMN season_key TEXT');
+    if (!existingUserColumns.has('season_xp')) await run('ALTER TABLE users ADD COLUMN season_xp INTEGER NOT NULL DEFAULT 0');
+    if (!existingUserColumns.has('season_points')) await run('ALTER TABLE users ADD COLUMN season_points INTEGER NOT NULL DEFAULT 0');
+    if (!existingUserColumns.has('season_message_count')) await run('ALTER TABLE users ADD COLUMN season_message_count INTEGER NOT NULL DEFAULT 0');
+    await run('UPDATE users SET season_key = ?, season_xp = xp, season_points = points, season_message_count = tracked_message_count WHERE season_key IS NULL', [getSeasonKey()]);
 
     const roomColumns = await all('PRAGMA table_info(rooms)');
     const existingRoomColumns = new Set(roomColumns.map((column) => column.name));
@@ -428,10 +464,39 @@ function createDatabase(options = {}) {
         unlocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         PRIMARY KEY (badge_id, discord_user_id)
       )`,
+      `CREATE TABLE IF NOT EXISTS season_badges (
+        badge_id TEXT NOT NULL,
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        season_key TEXT NOT NULL,
+        unlocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (badge_id, discord_user_id, season_key)
+      )`,
+      `CREATE TABLE IF NOT EXISTS season_study_vc_time (
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        season_key TEXT NOT NULL,
+        seconds BIGINT NOT NULL DEFAULT 0,
+        PRIMARY KEY (discord_user_id, season_key)
+      )`,
+      `CREATE TABLE IF NOT EXISTS season_history (
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        season_key TEXT NOT NULL,
+        xp INTEGER NOT NULL DEFAULT 0,
+        points INTEGER NOT NULL DEFAULT 0,
+        messages BIGINT NOT NULL DEFAULT 0,
+        level INTEGER NOT NULL DEFAULT 1,
+        study_seconds BIGINT NOT NULL DEFAULT 0,
+        badge_count INTEGER NOT NULL DEFAULT 0,
+        archived_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (discord_user_id, season_key)
+      )`,
       'CREATE INDEX IF NOT EXISTS idx_discord_events_guild_created ON discord_message_events (guild_id, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_discord_events_author_created ON discord_message_events (author_discord_user_id, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_room_messages_room_created ON room_messages (room_id, created_at)',
       'ALTER TABLE users ADD COLUMN IF NOT EXISTS last_xp_at TIMESTAMPTZ',
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS season_key TEXT',
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS season_xp INTEGER NOT NULL DEFAULT 0',
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS season_points INTEGER NOT NULL DEFAULT 0',
+      'ALTER TABLE users ADD COLUMN IF NOT EXISTS season_message_count BIGINT NOT NULL DEFAULT 0',
       'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS media_provider TEXT NOT NULL DEFAULT \'direct_video\'',
       'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS playback_state TEXT NOT NULL DEFAULT \'paused\'',
       'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS playback_position DOUBLE PRECISION NOT NULL DEFAULT 0',
@@ -440,8 +505,15 @@ function createDatabase(options = {}) {
       'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS end_reason TEXT',
       'ALTER TABLE events ADD COLUMN IF NOT EXISTS host_discord_user_id TEXT',
       'UPDATE events SET host_discord_user_id = \'\' WHERE host_discord_user_id IS NULL',
+      'UPDATE users SET season_key = $1, season_xp = xp, season_points = points, season_message_count = tracked_message_count WHERE season_key IS NULL',
     ];
-    for (const statement of statements) await run(statement);
+    for (const statement of statements) {
+      if (statement.startsWith('UPDATE users SET season_key = $1')) {
+        await pool.query(statement, [getSeasonKey()]);
+      } else {
+        await run(statement);
+      }
+    }
 
     await run("DELETE FROM room_messages WHERE discord_user_id = 'demo-user'");
     await run("DELETE FROM room_members WHERE discord_user_id = 'demo-user'");
