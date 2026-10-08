@@ -249,7 +249,7 @@ function createDatabase(options = {}) {
     const eventColumns = await all('PRAGMA table_info(events)');
     if (eventColumns.length && !eventColumns.some((column) => column.name === 'host_discord_user_id')) {
       await run('ALTER TABLE events ADD COLUMN host_discord_user_id TEXT');
-      await run("UPDATE events SET host_discord_user_id = '' WHERE host_discord_user_id IS NULL");
+      await run("DELETE FROM events WHERE host_discord_user_id IS NULL");
     }
     const participantColumns = await all('PRAGMA table_info(event_participants)');
     if (participantColumns.length && !participantColumns.some((column) => column.name === 'discord_user_id')) {
