@@ -206,6 +206,12 @@ function createDatabase(options = {}) {
         channel_id TEXT NOT NULL,
         joined_at TEXT NOT NULL
       )`,
+      `CREATE TABLE IF NOT EXISTS user_badges (
+        badge_id TEXT NOT NULL,
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        unlocked_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (badge_id, discord_user_id)
+      )`,
     ];
     for (const statement of statements) await run(statement);
 
@@ -415,6 +421,12 @@ function createDatabase(options = {}) {
         discord_user_id TEXT PRIMARY KEY REFERENCES users(discord_user_id) ON DELETE CASCADE,
         channel_id TEXT NOT NULL,
         joined_at TIMESTAMPTZ NOT NULL
+      )`,
+      `CREATE TABLE IF NOT EXISTS user_badges (
+        badge_id TEXT NOT NULL,
+        discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
+        unlocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        PRIMARY KEY (badge_id, discord_user_id)
       )`,
       'CREATE INDEX IF NOT EXISTS idx_discord_events_guild_created ON discord_message_events (guild_id, created_at)',
       'CREATE INDEX IF NOT EXISTS idx_discord_events_author_created ON discord_message_events (author_discord_user_id, created_at)',
