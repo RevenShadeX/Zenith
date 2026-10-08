@@ -35,6 +35,13 @@ function createDatabase(options = {}) {
     return { statement, params };
   }
 
+  function sqliteParams(params) {
+    return params.map((value) => {
+      if (typeof value === 'boolean') return value ? 1 : 0;
+      return value;
+    });
+  }
+
   function run(sql, params = []) {
     if (usePostgres) {
       const translated = translateForPostgres(sql, params);
@@ -43,7 +50,7 @@ function createDatabase(options = {}) {
         changes: result.rowCount || 0,
       }));
     }
-    const result = sqlite.prepare(sql).run(...params);
+    const result = sqlite.prepare(sql).run(...sqliteParams(params));
     return Promise.resolve({
       id: result.lastInsertRowid == null ? null : Number(result.lastInsertRowid),
       changes: Number(result.changes || 0),
@@ -55,7 +62,7 @@ function createDatabase(options = {}) {
       const translated = translateForPostgres(sql, params);
       return pool.query(translated.statement, translated.params).then((result) => result.rows[0] || null);
     }
-    return Promise.resolve(sqlite.prepare(sql).get(...params) || null);
+    return Promise.resolve(sqlite.prepare(sql).get(...sqliteParams(params)) || null);
   }
 
   function all(sql, params = []) {
@@ -63,7 +70,7 @@ function createDatabase(options = {}) {
       const translated = translateForPostgres(sql, params);
       return pool.query(translated.statement, translated.params).then((result) => result.rows || []);
     }
-    return Promise.resolve(sqlite.prepare(sql).all(...params) || []);
+    return Promise.resolve(sqlite.prepare(sql).all(...sqliteParams(params)) || []);
   }
 
   async function migrateLegacySqliteUsers() {
