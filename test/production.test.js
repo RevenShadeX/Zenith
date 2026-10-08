@@ -9,7 +9,7 @@ const { createDatabase } = require('../database');
 const fs = require('node:fs/promises');
 const os = require('node:os');
 const path = require('node:path');
-const sqlite3 = require('sqlite3').verbose();
+const { DatabaseSync } = require('node:sqlite');
 const { COMMANDS, isTrackableMessage } = require('../discord-bot');
 const { getDiscordLeaderboard, recordGuildMessage } = require('../discord-activity');
 const { canJoinRoom, isRoomHost } = require('../room-policy');
@@ -100,8 +100,8 @@ test('SQLite development schema stores Discord identities and tracked message ev
 test('legacy SQLite migration preserves real Discord snowflakes and drops seeded demo users', async (context) => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'zenith-legacy-'));
   const databasePath = path.join(directory, 'legacy.db');
-  const legacy = new sqlite3.Database(databasePath);
-  await new Promise((resolve, reject) => legacy.exec(`CREATE TABLE users (
+  const legacy = new DatabaseSync(databasePath);
+  legacy.exec(`CREATE TABLE users (
     id TEXT PRIMARY KEY, username TEXT NOT NULL, display_name TEXT, avatar TEXT,
     discord_id TEXT, xp INTEGER DEFAULT 0, points INTEGER DEFAULT 0, level INTEGER DEFAULT 1,
     messages_sent INTEGER DEFAULT 0, movie_nights INTEGER DEFAULT 0, music_nights INTEGER DEFAULT 0,
@@ -126,8 +126,8 @@ test('legacy SQLite migration preserves real Discord snowflakes and drops seeded
   INSERT INTO events (id, title, host, start_time, end_time, status) VALUES ('real-event', 'Real event', 'Real Member', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, 'upcoming');
   CREATE TABLE event_participants (event_id TEXT, user_id TEXT, joined_at TEXT, PRIMARY KEY (event_id, user_id));
   INSERT INTO event_participants VALUES ('event-1', 'demo-user', CURRENT_TIMESTAMP);
-  INSERT INTO event_participants VALUES ('real-event', '12345678901234567', CURRENT_TIMESTAMP);`, (error) => error ? reject(error) : resolve()));
-  await new Promise((resolve, reject) => legacy.close((error) => error ? reject(error) : resolve()));
+  INSERT INTO event_participants VALUES ('real-event', '12345678901234567', CURRENT_TIMESTAMP);`);
+  legacy.close();
 
   const database = createDatabase({ sqlitePath: databasePath });
   context.after(async () => {
