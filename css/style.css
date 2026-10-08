@@ -577,3 +577,39 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
     text-align: left;
   }
 }
+
+
+.profile-badges,
+.achievement-badge {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.profile-badges { margin-top: 12px; }
+.achievement-badge {
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 999px;
+  background: rgba(255,255,255,.035);
+  font-size: 10px;
+  letter-spacing: .04em;
+  white-space: nowrap;
+}
+.achievement-badge-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  font-size: 8px;
+  background: rgba(255,255,255,.08);
+}
+.rarity-common { opacity: .8; }
+.rarity-uncommon { border-color: rgba(160,190,255,.25); }
+.rarity-rare { border-color: rgba(190,120,255,.35); }
+.rarity-epic { border-color: rgba(255,100,180,.4); }
+.rarity-legendary { border-color: rgba(255,190,80,.5); }
+.badge-empty { font-size: 11px; opacity: .55; }
+.member-name .achievement-badge { margin-top: 4px; }
