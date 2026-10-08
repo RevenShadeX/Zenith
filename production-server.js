@@ -773,6 +773,15 @@ function createApp() {
   }));
 
   app.post('/api/events', requireSameOrigin, requireAuth, asyncRoute(async (req, res) => {
+    if (!discordBot) return res.status(503).json({ error: 'Discord administration is unavailable right now.' });
+    let allowed = false;
+    try {
+      allowed = await discordBot.isGuildAdministrator(req.session.discordUserId);
+    } catch {
+      allowed = false;
+    }
+    if (!allowed) return res.status(403).json({ error: 'Only the server owner or a server administrator can create events.' });
+
     const title = sanitizeText(req.body?.title, 100);
     const description = sanitizeText(req.body?.description, 500);
     const type = sanitizeText(req.body?.type, 40).toUpperCase() || 'COMMUNITY EVENT';
