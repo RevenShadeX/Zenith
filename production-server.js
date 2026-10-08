@@ -778,8 +778,8 @@ function createApp() {
     const type = sanitizeText(req.body?.type, 40).toUpperCase() || 'COMMUNITY EVENT';
     const startTime = new Date(req.body?.startTime);
     const endTime = new Date(req.body?.endTime);
-    if (!title || Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || endTime <= startTime) {
-      return res.status(400).json({ error: 'Provide a title and a valid event time range.' });
+    if (!title || Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || startTime <= new Date() || endTime <= startTime) {
+      return res.status(400).json({ error: 'Provide a title and a future event time range.' });
     }
     const user = await getUser(req.session.discordUserId);
     if (!user) return res.status(401).json({ error: 'Discord authentication required.' });
