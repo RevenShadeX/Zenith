@@ -494,3 +494,86 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   .period-tabs { display: grid; grid-template-columns: repeat(2, 1fr); }
   .historical-note { align-items: start; flex-direction: column; }
 }
+
+
+/* Missions */
+.missions-section {
+  margin: 0 auto 4rem;
+  max-width: 1200px;
+}
+.missions-compact {
+  margin-top: 1.5rem;
+}
+.mission-reset {
+  font-size: .78rem;
+  color: var(--muted, #8f8f98);
+  text-align: right;
+}
+.missions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1rem;
+}
+.mission-card {
+  border: 1px solid rgba(255,255,255,.08);
+  background: rgba(255,255,255,.025);
+  border-radius: 18px;
+  padding: 1.15rem;
+  min-width: 0;
+}
+.mission-card.is-claimed {
+  opacity: .72;
+}
+.mission-card-top,
+.mission-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+}
+.mission-card-top strong {
+  font-size: .82rem;
+  white-space: nowrap;
+}
+.mission-card h3 {
+  margin: .35rem 0 .3rem;
+}
+.mission-card p {
+  margin: 0 0 .9rem;
+  color: var(--muted, #8f8f98);
+  min-height: 2.6em;
+}
+.mission-progress {
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  margin-bottom: .9rem;
+}
+.mission-progress span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: currentColor;
+}
+.mission-footer {
+  font-size: .72rem;
+  color: var(--muted, #8f8f98);
+}
+.mission-footer .button {
+  flex: 0 0 auto;
+}
+.mission-claimed {
+  font-size: .7rem;
+  letter-spacing: .08em;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .missions-grid {
+    grid-template-columns: 1fr;
+  }
+  .mission-reset {
+    text-align: left;
+  }
+}
