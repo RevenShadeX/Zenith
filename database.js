@@ -209,7 +209,7 @@ function createDatabase(options = {}) {
         claimed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (mission_id, discord_user_id, period_key)
       )`,
-      `CREATE TABLE IF NOT EXISTS study_vc_time (
+      `CREATE TABLE IF NOT EXISTS discord_invite_uses (\n        guild_id TEXT NOT NULL,\n        invite_code TEXT NOT NULL,\n        inviter_discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,\n        invited_discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,\n        joined_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,\n        PRIMARY KEY (guild_id, invite_code, invited_discord_user_id)\n      )`,\n      `CREATE TABLE IF NOT EXISTS study_vc_time (
         discord_user_id TEXT PRIMARY KEY REFERENCES users(discord_user_id) ON DELETE CASCADE,
         seconds INTEGER NOT NULL DEFAULT 0
       )`,
