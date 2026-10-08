@@ -2,6 +2,7 @@
 
 const { isTrackableMessage } = require('./discord-bot');
 const { leaderboardWindowStart } = require('./leaderboard');
+const { getSeasonKey, ensureUserSeason } = require('./season');
 
 async function recordGuildMessage(database, message, guildId) {
   if (!isTrackableMessage(message, guildId)) return false;
@@ -26,6 +27,8 @@ async function recordGuildMessage(database, message, guildId) {
     [discordUserId, username, displayName, avatar, guildId]
   );
 
+  await ensureUserSeason(database, discordUserId);
+
   const inserted = await database.run(
     'INSERT OR IGNORE INTO discord_message_events (message_id, guild_id, channel_id, author_discord_user_id, created_at) VALUES (?, ?, ?, ?, ?)',
     [String(message.id), guildId, String(message.channelId), discordUserId, createdAt]
@@ -38,7 +41,9 @@ async function recordGuildMessage(database, message, guildId) {
 
   await database.run(
     `UPDATE users SET tracked_message_count = tracked_message_count + 1,
+     season_message_count = season_message_count + 1,
      points = points + 1,
+     season_points = season_points + 1,
      last_message_at = CASE WHEN last_message_at IS NULL OR last_message_at < ? THEN ? ELSE last_message_at END,
      updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?`,
     [createdAt, createdAt, discordUserId]
@@ -55,14 +60,15 @@ async function recordGuildMessage(database, message, guildId) {
 
   if (xpClaim.changes) {
     const userState = await database.get(
-      'SELECT xp FROM users WHERE discord_user_id = ?',
+      'SELECT xp, season_xp FROM users WHERE discord_user_id = ?',
       [discordUserId]
     );
     const newXp = Number(userState?.xp || 0) + 15;
-    const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1;
+    const newSeasonXp = Number(userState?.season_xp || 0) + 15;
+    const newLevel = Math.floor(Math.sqrt(newSeasonXp / 100)) + 1;
     await database.run(
-      'UPDATE users SET xp = ?, level = ?, updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?',
-      [newXp, newLevel, discordUserId]
+      'UPDATE users SET xp = ?, season_xp = ?, level = ?, updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?',
+      [newXp, newSeasonXp, newLevel, discordUserId]
     );
   }
   return true;
@@ -70,23 +76,30 @@ async function recordGuildMessage(database, message, guildId) {
 
 async function getDiscordLeaderboard(database, guildId, period = 'all_time', now = new Date()) {
   const start = leaderboardWindowStart(period, now);
-  const params = [guildId];
+  const seasonKey = getSeasonKey(now);
+  const params = [guildId, seasonKey];
+  let messageExpression = 'u.season_message_count';
   let windowClause = '';
-  if (start) {
+  if (start && period !== 'this_month') {
+    messageExpression = 'COUNT(e.message_id)';
     windowClause = ' AND e.created_at >= ?';
     params.push(start);
   }
   return database.all(
     `SELECT u.discord_user_id AS id, u.username, u.display_name, u.avatar,
-       COUNT(e.message_id) AS message_count, MAX(e.created_at) AS last_message_at,
-       MAX(u.xp) AS xp, MAX(u.level) AS level, MAX(u.points) AS points
-     FROM discord_message_events e
-     INNER JOIN users u ON u.discord_user_id = e.author_discord_user_id
-     WHERE e.guild_id = ?${windowClause}
-     GROUP BY u.discord_user_id, u.username, u.display_name, u.avatar
-     ORDER BY message_count DESC, u.display_name ASC
+       ${messageExpression} AS message_count, MAX(e.created_at) AS last_message_at,
+       u.season_xp AS xp, u.level AS level, u.season_points AS points
+     FROM users u
+     LEFT JOIN discord_message_events e
+       ON e.author_discord_user_id = u.discord_user_id AND e.guild_id = ?${windowClause}
+     WHERE u.guild_id = ? AND u.season_key = ?
+     GROUP BY u.discord_user_id, u.username, u.display_name, u.avatar,
+       u.season_message_count, u.season_xp, u.level, u.season_points
+     ORDER BY message_count DESC, u.season_xp DESC, u.display_name ASC
      LIMIT 100`,
-    params
+    period === 'all_time' || period === 'this_month'
+      ? [guildId, guildId, seasonKey]
+      : params
   );
 }
 
