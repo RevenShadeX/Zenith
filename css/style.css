@@ -621,3 +621,26 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .rarity-legendary { border-color: rgba(255,190,80,.5); }
 .badge-empty { font-size: 11px; opacity: .55; }
 .member-name .achievement-badge { margin-top: 4px; }
+
+
+.community-missions-section { margin-top: 38px; }
+.community-missions-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.community-mission-card { min-width: 0; padding: 17px; border: 1px solid var(--line); background: rgba(17,21,25,.76); }
+.community-mission-card h3 { margin: 7px 0 4px; font-size: 17px; }
+.community-mission-card > p { margin: 0 0 14px; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.mission-reward { color: var(--muted); font-size: 9px; white-space: nowrap; }
+.mission-members { display: grid; gap: 7px; max-height: 360px; overflow: auto; padding-right: 2px; }
+.mission-member { display: grid; grid-template-columns: 28px minmax(0,1fr) auto; align-items: center; gap: 9px; padding: 7px 8px; border: 1px solid rgba(255,255,255,.06); background: rgba(255,255,255,.018); }
+.mission-member-avatar { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+.mission-member-main { min-width: 0; display: grid; gap: 5px; }
+.mission-member-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mission-member-head strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 10px; }
+.mission-member-head small { color: var(--sun); font-size: 7px; font-weight: 700; }
+.mission-member-progressbar { height: 4px; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.08); }
+.mission-member-progressbar span { display: block; height: 100%; border-radius: inherit; background: var(--accent-strong); }
+.mission-member-progress, .mission-member-status { color: var(--muted); font-size: 8px; font-weight: 700; white-space: nowrap; }
+.mission-member-status.is-complete { color: var(--mint); }
+@media (max-width: 680px) {
+  .community-missions-grid { grid-template-columns: 1fr; }
+  .mission-reward { font-size: 8px; }
+}
