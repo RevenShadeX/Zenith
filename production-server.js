@@ -145,15 +145,23 @@ async function getPublicUser(discordUserId) {
   await ensureUserSeason(database, discordUserId);
   const user = await getUser(discordUserId);
   let admin = false;
+  let owner = false;
   if (user && discordBot) {
     try {
       admin = await discordBot.isGuildAdministrator(discordUserId);
     } catch {
       admin = false;
     }
+    try {
+      owner = discordBot.isGuildOwner ? await discordBot.isGuildOwner(discordUserId) : false;
+    } catch {
+      owner = false;
+    }
   }
   const badges = user ? await checkAndSyncBadges(discordUserId) : [];
-  return toPublicUser(user, admin, badges);
+  const publicUser = toPublicUser(user, admin, badges);
+  if (publicUser) publicUser.owner = owner;
+  return publicUser;
 }
 
 async function upsertDiscordUser(profile) {
