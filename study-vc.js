@@ -41,6 +41,7 @@ async function startStudySession(database, discordUserId, channelId) {
 async function stopStudySession(database, discordUserId, now = Date.now()) {
   const session = await database.get('SELECT discord_user_id, joined_at FROM study_vc_sessions WHERE discord_user_id = ?', [String(discordUserId)]);
   if (!session) return 0;
+  await ensureUserSeason(database, discordUserId, new Date(now));
   const joinedAt = new Date(session.joined_at).getTime();
   const seconds = Number.isFinite(joinedAt) ? Math.max(0, Math.floor((now - joinedAt) / 1000)) : 0;
   await database.run(
@@ -66,6 +67,7 @@ async function flushStudySessions(database, now = Date.now()) {
     const joinedAt = new Date(session.joined_at).getTime();
     const seconds = Number.isFinite(joinedAt) ? Math.max(0, Math.floor((now - joinedAt) / 1000)) : 0;
     if (seconds <= 0) continue;
+    await ensureUserSeason(database, session.discord_user_id, new Date(now));
     await database.run(
       `INSERT INTO study_vc_time (discord_user_id, seconds)
        VALUES (?, ?)
