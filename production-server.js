@@ -902,7 +902,7 @@ function createApp() {
   }));
 
   app.post('/api/events/:id/join', requireSameOrigin, requireAuth, asyncRoute(async (req, res) => {
-    const event = await database.get("SELECT id FROM events WHERE id = ? AND status = 'upcoming'", [req.params.id]);
+    const event = await database.get("SELECT id FROM events WHERE id = ? AND status = 'upcoming' AND end_time > ?", [req.params.id, new Date().toISOString()]);
     if (!event) return res.status(404).json({ error: 'Event not found.' });
     await database.run('INSERT OR IGNORE INTO event_participants (event_id, discord_user_id) VALUES (?, ?)', [event.id, req.session.discordUserId]);
     res.json({ ok: true, eventId: event.id });
