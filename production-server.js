@@ -654,7 +654,8 @@ function createApp() {
       getStudyLeaderboard(database, process.env.DISCORD_GUILD_ID || 'unconfigured'),
       getTrackingInfo(),
     ]);
-    const badgeMap = await getBadgesForUsers(database, users.map((user) => user.id || user.discord_user_id));
+    await Promise.all(users.slice(0, 20).map((user) => checkAndUnlockBadges(database, user.id || user.discord_user_id)));
+    const badgeMap = await getBadgesForUsers(database, users.slice(0, 20).map((user) => user.id || user.discord_user_id));
     for (const user of users) user.badges = (badgeMap.get(String(user.id || user.discord_user_id)) || []).slice(-3).reverse();
     const studyChannelId = await getStudyVcChannelId(database);
     res.json({ period, users, studyLeaderboard, studyChannelId, tracking, source: 'discord_message_events' });
