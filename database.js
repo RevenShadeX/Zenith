@@ -188,7 +188,7 @@ function createDatabase(options = {}) {
         guesses_json TEXT NOT NULL DEFAULT '[]',
         PRIMARY KEY (date_key, discord_user_id)
       )`,
-      CREATE TABLE IF NOT EXISTS mission_claims (
+      `CREATE TABLE IF NOT EXISTS mission_claims (
         mission_id TEXT NOT NULL,
         discord_user_id TEXT NOT NULL REFERENCES users(discord_user_id) ON DELETE CASCADE,
         period_key TEXT NOT NULL,
@@ -196,7 +196,7 @@ function createDatabase(options = {}) {
         points_reward INTEGER NOT NULL DEFAULT 0,
         claimed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (mission_id, discord_user_id, period_key)
-      ),
+      )`,
     ];
     for (const statement of statements) await run(statement);
 
