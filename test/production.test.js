@@ -24,6 +24,20 @@ test('development config does not silently enable any authentication fallback', 
   assert.deepEqual(productionConfigErrors({ NODE_ENV: 'development' }), []);
 });
 
+test('explicit insecure HTTP production mode permits HTTP OAuth and SQLite', () => {
+  const errors = productionConfigErrors({
+    NODE_ENV: 'production',
+    ALLOW_INSECURE_HTTP: 'true',
+    DISCORD_CLIENT_ID: '12345678901234567',
+    DISCORD_CLIENT_SECRET: 'secret',
+    DISCORD_REDIRECT_URI: 'http://127.0.0.1:3000/auth/discord/callback',
+    DISCORD_BOT_TOKEN: 'token',
+    DISCORD_GUILD_ID: '12345678901234568',
+    SESSION_SECRET: 'this-is-a-long-enough-session-secret-for-http-mode',
+  });
+  assert.deepEqual(errors, []);
+});
+
 test('production requires a secure OAuth callback, strong session secret, and PostgreSQL URL', () => {
   const errors = productionConfigErrors({
     NODE_ENV: 'production',
