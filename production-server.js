@@ -996,6 +996,7 @@ async function handleDiscordMemberJoin(member, invite) {
      VALUES (?, ?, ?, ?, ?)`,
     [guildId, String(invite.code), String(invite.inviterId), String(member.id), new Date().toISOString()]
   );
+  await checkAndUnlockBadges(database, String(invite.inviterId));
 }
 
 async function handleDiscordLevelCommand(target, userLike) {
