@@ -1,5 +1,7 @@
 'use strict';
 
+const { ensureUserSeason } = require('./season');
+
 const DAILY_MISSIONS = [
   { id: 'daily_messages_10', period: 'daily', title: 'Say hello', description: 'Send 10 messages in the Discord server.', target: 10, metric: 'messages', xp: 50, points: 25 },
   { id: 'daily_game_1', period: 'daily', title: 'Solve today\'s puzzle', description: 'Complete the Zenith daily word game.', target: 1, metric: 'game_wins', xp: 50, points: 25 },
@@ -133,18 +135,21 @@ async function claimMission(database, userId, missionId, periodKey) {
   const progress = await getMetricProgress(database, userId, mission);
   if (progress < mission.target) throw new Error('Complete the mission before claiming its reward.');
 
+  await ensureUserSeason(database, userId);
+
   const inserted = await database.run(
     'INSERT OR IGNORE INTO mission_claims (mission_id, discord_user_id, period_key, xp_reward, points_reward) VALUES (?, ?, ?, ?, ?)',
     [mission.id, userId, periodKey, mission.xp, mission.points]
   );
   if (!inserted.changes) throw new Error('This mission reward has already been claimed.');
 
-  const user = await database.get('SELECT xp FROM users WHERE discord_user_id = ?', [userId]);
+  const user = await database.get('SELECT xp, season_xp FROM users WHERE discord_user_id = ?', [userId]);
   const newXp = Number(user?.xp || 0) + mission.xp;
-  const newLevel = Math.floor(Math.sqrt(newXp / 100)) + 1;
+  const newSeasonXp = Number(user?.season_xp || 0) + mission.xp;
+  const newLevel = Math.floor(Math.sqrt(newSeasonXp / 100)) + 1;
   await database.run(
-    'UPDATE users SET xp = ?, level = ?, points = points + ?, updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?',
-    [newXp, newLevel, mission.points, userId]
+    'UPDATE users SET xp = ?, season_xp = ?, level = ?, points = points + ?, season_points = season_points + ?, updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?',
+    [newXp, newSeasonXp, newLevel, mission.points, mission.points, userId]
   );
 
   return { mission, xp: newXp, level: newLevel, points: mission.points };
