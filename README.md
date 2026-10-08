@@ -27,7 +27,7 @@ Set these in the deployment environment, never in frontend code:
 
 - `NODE_ENV=production`
 - `PORT`
-- `DATABASE_URL` – PostgreSQL connection URL
+- `DATABASE_URL` – PostgreSQL connection URL; optional only when `ALLOW_INSECURE_HTTP=true` is intentionally used with SQLite
 - `SESSION_SECRET` – at least 32 random characters
 - `DISCORD_CLIENT_ID`
 - `DISCORD_CLIENT_SECRET`
@@ -36,8 +36,9 @@ Set these in the deployment environment, never in frontend code:
 - `DISCORD_GUILD_ID`
 - `PG_POOL_MAX` – optional PostgreSQL pool size
 - `ZENITH_TIMEZONE` – timezone used for daily game rollover (defaults to `Asia/Colombo`)
+- `ALLOW_INSECURE_HTTP` – set to `true` only for an intentionally HTTP-only deployment; this disables Secure cookies/HSTS and permits an HTTP OAuth callback. Never use it for a security-sensitive public deployment.
 
-Production startup fails if any required Discord or database value is missing, if the callback is not HTTPS, if the session secret is too short, or if the database URL is not PostgreSQL. The session cookie is Secure, HttpOnly, SameSite=Lax, and sessions are stored in PostgreSQL.
+Production startup fails if required Discord values are missing, if the session secret is too short, or if a normal secure deployment lacks PostgreSQL. Secure production requires an HTTPS callback. With `ALLOW_INSECURE_HTTP=true`, an explicit HTTP callback and local SQLite are permitted for intentionally insecure deployments. Secure production uses a Secure, HttpOnly, SameSite=Lax session cookie; HTTP mode uses an HttpOnly, SameSite=Lax cookie without the Secure flag.
 
 ## Discord Configuration
 
