@@ -18,7 +18,7 @@ async function ensureUserSeason(database, discordUserId, now = new Date()) {
   const id = String(discordUserId);
   const seasonKey = getSeasonKey(now);
   const user = await database.get(
-    'SELECT discord_user_id, season_key, xp, points, tracked_message_count, level FROM users WHERE discord_user_id = ?',
+    'SELECT discord_user_id, season_key, xp, points, tracked_message_count, season_xp, season_points, season_message_count, level FROM users WHERE discord_user_id = ?',
     [id]
   );
   if (!user) return seasonKey;
@@ -41,9 +41,9 @@ async function ensureUserSeason(database, discordUserId, now = new Date()) {
       [
         id,
         user.season_key,
-        Number(user.xp || 0),
-        Number(user.points || 0),
-        Number(user.tracked_message_count || 0),
+        Number(user.season_xp || 0),
+        Number(user.season_points || 0),
+        Number(user.season_message_count || 0),
         Number(user.level || 1),
         Number(study?.seconds || 0),
         Number(badges?.count || 0),
