@@ -15,7 +15,7 @@ const { getDiscordLeaderboard, recordGuildMessage } = require('./discord-activit
 const { canJoinRoom, isRoomHost } = require('./room-policy');
 const { classifyMediaUrl } = require('./media');
 const { leaderboardWindowStart } = require('./leaderboard');
-const { getMissionState, claimMission } = require('./missions');
+const { getMissionState, getCommunityMissionState, claimMission } = require('./missions');
 const { checkAndUnlockBadges, getBadgesForUsers, getUserBadges } = require('./badges');
 const { getStudyLeaderboard, getStudyVcChannelId, setStudyVcChannelId, startStudySession, stopStudySession, flushStudySessions } = require('./study-vc');
 const { assertProductionConfig } = require('./production-config');
@@ -647,6 +647,10 @@ function createApp() {
     res.json(await getMissionState(database, req.session.discordUserId));
   }));
 
+  app.get('/api/missions/community', requireAuth, asyncRoute(async (req, res) => {
+    res.json(await getCommunityMissionState(database, new Date(), process.env.DISCORD_GUILD_ID || 'unconfigured'));
+  }));
+
   app.post('/api/missions/:id/claim', requireSameOrigin, requireAuth, asyncRoute(async (req, res) => {
     const periodKey = String(req.body?.periodKey || '');
     if (!periodKey) return res.status(400).json({ error: 'Mission period is required.' });
@@ -980,6 +984,20 @@ async function ensureDiscordUser(discordUserId, userLike = {}) {
   return getUser(id);
 }
 
+async function handleDiscordMemberJoin(member, invite) {
+  if (!member?.id || member.user?.bot || !invite?.inviterId || invite.inviterId === String(member.id)) return;
+  const guildId = process.env.DISCORD_GUILD_ID;
+  if (!guildId || member.guild?.id !== guildId) return;
+
+  await ensureDiscordUser(member.id, member.user || {});
+  await ensureDiscordUser(invite.inviterId, invite.inviter || {});
+  await database.run(
+    `INSERT OR IGNORE INTO discord_invite_uses (guild_id, invite_code, inviter_discord_user_id, invited_discord_user_id, joined_at)
+     VALUES (?, ?, ?, ?, ?)`,
+    [guildId, String(invite.code), String(invite.inviterId), String(member.id), new Date().toISOString()]
+  );
+}
+
 async function handleDiscordLevelCommand(target, userLike) {
   if (target === 'study_vc') {
     return getStudyLeaderboard(database, process.env.DISCORD_GUILD_ID || 'unconfigured');
@@ -1088,6 +1106,7 @@ async function startServer() {
       onEventCommand: handleDiscordEventCommand,
       onLeaderboardConfig: configureLeaderboard,
       onVoiceStateUpdate: handleStudyVoiceState,
+      onMemberJoin: handleDiscordMemberJoin,
       onReady: async (guild) => {
         await ensureUsersCurrentSeason(database, process.env.DISCORD_GUILD_ID || 'unconfigured');
         await database.run('INSERT OR IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)', [trackingDateKey(), new Date().toISOString()]);
