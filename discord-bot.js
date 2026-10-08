@@ -93,6 +93,20 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
   const inviteState = new Map();
   const badgeRolePromises = new Map();
 
+  async function syncBadgeRole(discordUserId, badge) {
+    if (!guild || !badge?.name) return false;
+    try {
+      let role = guild.roles.cache.find((item) => item.name === badge.name);
+      if (!role) role = await guild.roles.create({ name: badge.name, reason: 'Zenith badge' });
+      const member = await guild.members.fetch(String(discordUserId));
+      if (!member.roles.cache.has(role.id)) await member.roles.add(role, 'Zenith badge earned');
+      return true;
+    } catch (error) {
+      onError(new Error('Badge sync failed: ' + error.message));
+      return false;
+    }
+  }
+
   async function refreshInvites() {
     if (!guild) return;
     try {
@@ -264,7 +278,7 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
       || member.permissions.has(PermissionFlagsBits.ManageGuild);
   }
 
-  return { client, getGuildMember, isGuildAdministrator, ready, commands: COMMANDS };
+  return { client, getGuildMember, isGuildAdministrator, syncBadgeRole, ready, commands: COMMANDS };
 }
 
 module.exports = { COMMANDS, createDiscordBot, isTrackableMessage };
