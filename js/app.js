@@ -29,6 +29,7 @@ const state = {
   communityMissions: null,
   seasonHistory: [],
   studyRefreshTimer: null,
+  liveRefreshTimer: null,
 };
 
 const appEl = document.querySelector('#app');
@@ -86,6 +87,17 @@ function signInPrompt(label, className = 'button button-outline') {
 function startDiscordLogin() {
   if (state.status?.discordAuth === 'Configured') window.location.href = '/auth/discord';
   else showToast('Discord sign-in is not configured on this server.', 'error');
+}
+
+async function refreshLiveHome() {
+  try {
+    const home = await fetchJson('/api/home');
+    state.memberCount = Number.isFinite(Number(home.tracking?.memberCount)) ? Number(home.tracking.memberCount) : null;
+    state.status = home.status || state.status;
+    renderTopbar();
+  } catch {
+    // Keep the last known live data if a background refresh fails.
+  }
 }
 
 async function refreshEvents() {
@@ -960,6 +972,7 @@ async function loadInitial() {
     state.leaderboard = home.leaderboard || [];
     state.latestMessages = home.latestMessages || [];
     state.tracking = home.tracking || null;
+    state.memberCount = Number.isFinite(Number(state.tracking?.memberCount)) ? Number(state.tracking.memberCount) : null;
     state.status = home.status || null;
   } catch (error) {
     state.rooms = [];
@@ -1032,6 +1045,8 @@ async function boot() {
   if (state.page === 'watch' && state.roomId && state.user) connectRoomSocket(state.roomId);
   if (state.page === 'community') { refreshLeaderboard(state.leaderboardPeriod); refreshCommunityMissions(); }
   if (state.page === 'events') refreshEvents();
+  window.clearInterval(state.liveRefreshTimer);
+  state.liveRefreshTimer = window.setInterval(refreshLiveHome, 30000);
 }
 
 boot();
