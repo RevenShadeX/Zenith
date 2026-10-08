@@ -225,7 +225,7 @@ async function claimMission(database, userId, missionId, periodKey) {
   const user = await database.get('SELECT xp, season_xp FROM users WHERE discord_user_id = ?', [userId]);
   const newXp = Number(user?.xp || 0) + mission.xp;
   const newSeasonXp = Number(user?.season_xp || 0) + mission.xp;
-  const newLevel = Math.floor(Math.sqrt(newSeasonXp / 100)) + 1;
+  const newLevel = Math.floor(Math.sqrt(newSeasonXp / 120)) + 1;
   await database.run(
     'UPDATE users SET xp = ?, season_xp = ?, level = ?, points = points + ?, season_points = season_points + ?, updated_at = CURRENT_TIMESTAMP WHERE discord_user_id = ?',
     [newXp, newSeasonXp, newLevel, mission.points, mission.points, userId]
