@@ -12,10 +12,15 @@ function createDatabase(options = {}) {
     const { Pool } = require('pg');
     pool = new Pool({ connectionString: databaseUrl, max: Number(process.env.PG_POOL_MAX || 10) });
   } else {
-    const sqlite3 = require('sqlite3').verbose();
+    // Node 22.5+ includes SQLite natively. Using node:sqlite avoids the
+    // native sqlite3 npm addon, whose prebuilt binary is unavailable on
+    // some managed hosting images such as WispByte's Node 22 image.
+    const { DatabaseSync } = require('node:sqlite');
     const sqlitePath = options.sqlitePath || process.env.SQLITE_PATH || (databaseUrl || path.join(__dirname, 'zenith.db'));
-    sqlite = new sqlite3.Database(sqlitePath);
-    sqlite.run('PRAGMA foreign_keys = ON');
+    sqlite = new DatabaseSync(sqlitePath, {
+      enableForeignKeyConstraints: true,
+      timeout: 5000,
+    });
   }
 
   function translateForPostgres(sql, params) {
@@ -37,11 +42,10 @@ function createDatabase(options = {}) {
         changes: result.rowCount || 0,
       }));
     }
-    return new Promise((resolve, reject) => {
-      sqlite.run(sql, params, function onRun(error) {
-        if (error) return reject(error);
-        resolve({ id: this.lastID, changes: this.changes });
-      });
+    const result = sqlite.prepare(sql).run(...params);
+    return Promise.resolve({
+      id: result.lastInsertRowid == null ? null : Number(result.lastInsertRowid),
+      changes: Number(result.changes || 0),
     });
   }
 
@@ -50,12 +54,7 @@ function createDatabase(options = {}) {
       const translated = translateForPostgres(sql, params);
       return pool.query(translated.statement, translated.params).then((result) => result.rows[0] || null);
     }
-    return new Promise((resolve, reject) => {
-      sqlite.get(sql, params, (error, row) => {
-        if (error) return reject(error);
-        resolve(row || null);
-      });
-    });
+    return Promise.resolve(sqlite.prepare(sql).get(...params) || null);
   }
 
   function all(sql, params = []) {
@@ -63,12 +62,7 @@ function createDatabase(options = {}) {
       const translated = translateForPostgres(sql, params);
       return pool.query(translated.statement, translated.params).then((result) => result.rows || []);
     }
-    return new Promise((resolve, reject) => {
-      sqlite.all(sql, params, (error, rows) => {
-        if (error) return reject(error);
-        resolve(rows || []);
-      });
-    });
+    return Promise.resolve(sqlite.prepare(sql).all(...params) || []);
   }
 
   async function migrateLegacySqliteUsers() {
@@ -411,7 +405,7 @@ function createDatabase(options = {}) {
 
   async function close() {
     if (pool) await pool.end();
-    if (sqlite) await new Promise((resolve, reject) => sqlite.close((error) => error ? reject(error) : resolve()));
+    if (sqlite) sqlite.close();
   }
 
   return { all, close, get, initialize, isPostgres: usePostgres, run };
