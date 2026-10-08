@@ -138,10 +138,17 @@ async function checkAndUnlockBadges(database, discordUserId, now = new Date()) {
 
   for (const badge of BADGES) {
     if (!unlockedByCriteria(badge, counts)) continue;
-    await database.run(
-      'INSERT OR IGNORE INTO season_badges (badge_id, discord_user_id, season_key, unlocked_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
-      [badge.id, discordUserId, seasonKey]
-    );
+    if (badge.permanent) {
+      await database.run(
+        'INSERT OR IGNORE INTO user_badges (badge_id, discord_user_id, unlocked_at) VALUES (?, ?, CURRENT_TIMESTAMP)',
+        [badge.id, discordUserId]
+      );
+    } else {
+      await database.run(
+        'INSERT OR IGNORE INTO season_badges (badge_id, discord_user_id, season_key, unlocked_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)',
+        [badge.id, discordUserId, seasonKey]
+      );
+    }
   }
 
   return getUserBadges(database, discordUserId, now);
