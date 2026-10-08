@@ -283,7 +283,12 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
       || member.permissions.has(PermissionFlagsBits.ManageGuild);
   }
 
-  return { client, getGuildMember, getMemberCount, isGuildAdministrator, syncBadgeRole, ready, commands: COMMANDS };
+  async function isGuildOwner(discordUserId) {
+    if (!guild) await ready;
+    return guild?.ownerId === String(discordUserId);
+  }
+
+  return { client, getGuildMember, getMemberCount, isGuildAdministrator, isGuildOwner, syncBadgeRole, ready, commands: COMMANDS };
 }
 
 module.exports = { COMMANDS, createDiscordBot, isTrackableMessage };
