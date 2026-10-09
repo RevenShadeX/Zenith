@@ -90,8 +90,9 @@ class DirectVideoProvider {
         await this.video.play();
       }
       if (action === 'pause') {
-        this.video.pause();
+        // Seek first, then pause. Keep the final command in the paused state.
         if (Math.abs(this.video.currentTime - position) > 0.35) this.video.currentTime = position;
+        this.video.pause();
       }
     } catch {
       document.querySelector('#playbackHint')?.classList.remove('is-hidden');
@@ -214,8 +215,10 @@ class EmbedProvider {
           this.player.playVideo();
         }
         if (action === 'pause') {
-          this.player.pauseVideo();
+          // YouTube seekTo() can resume playback if the player has not completed
+          // its asynchronous pause transition. Seek first and pause last.
           if (Math.abs(this.player.getCurrentTime() - position) > 0.75) this.player.seekTo(position, true);
+          this.player.pauseVideo();
         }
       } else {
         if (action === 'seek') await this.player.setCurrentTime(position);
@@ -225,8 +228,9 @@ class EmbedProvider {
           await this.player.play();
         }
         if (action === 'pause') {
-          await this.player.pause();
+          // Finish with pause after correcting the timestamp.
           if (Math.abs(await this.player.getCurrentTime() - position) > 0.75) await this.player.setCurrentTime(position);
+          await this.player.pause();
         }
       }
     } catch {
