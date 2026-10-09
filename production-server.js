@@ -445,9 +445,14 @@ async function handleRoomSocketMessage(socket, raw) {
 
   if (data.type === 'playback') {
     const action = data.action;
-    if (!['play', 'pause', 'seek', 'ended'].includes(action)) return sendSocket(socket, { type: 'error', error: 'Unsupported playback action.' });
+    if (!['play', 'pause', 'seek', 'ended', 'sync'].includes(action)) return sendSocket(socket, { type: 'error', error: 'Unsupported playback action.' });
     const position = Number(data.position);
     if (!Number.isFinite(position) || position < 0 || position > 86400) return sendSocket(socket, { type: 'error', error: 'Playback position is invalid.' });
+    if (action === 'sync') {
+      if (room.playback_state !== 'playing') return;
+      broadcastRoom(roomId, { type: 'playback_sync', roomId, action: 'sync', state: 'playing', position, serverTime: Date.now(), by: socket.userId });
+      return;
+    }
     if (action === 'ended') {
       const endedAt = new Date().toISOString();
       await database.run("UPDATE rooms SET status = 'ended', playback_state = 'ended', playback_position = ?, playback_updated_at = ?, ended_at = ?, end_reason = 'media_ended', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [position, endedAt, endedAt, roomId]);
@@ -1205,11 +1210,17 @@ wss.on('connection', (socket, request) => {
     socket.user = user;
   });
   socket.on('pong', () => { socket.isAlive = true; });
+  socket.messageQueue = Promise.resolve();
   socket.on('message', (raw) => {
-    identityReady.then(() => handleRoomSocketMessage(socket, raw)).catch((error) => {
-      console.error('Room WebSocket message failed:', error.message);
-      sendSocket(socket, { type: 'error', error: 'The room action could not be completed.' });
-    });
+    // WebSocket frames arrive in order; keep async database work in that same order.
+    // Otherwise a first chat message can race ahead of the join_room database checks.
+    socket.messageQueue = socket.messageQueue
+      .then(() => identityReady)
+      .then(() => handleRoomSocketMessage(socket, raw))
+      .catch((error) => {
+        console.error('Room WebSocket message failed:', error.message);
+        sendSocket(socket, { type: 'error', error: 'The room action could not be completed.' });
+      });
   });
   socket.on('close', () => {
     activeConnections.delete(socket);
