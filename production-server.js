@@ -498,7 +498,9 @@ async function handleRoomSocketMessage(socket, raw) {
     if (action === 'ended') {
       const endedAt = new Date().toISOString();
       await database.run("UPDATE rooms SET status = 'ended', playback_state = 'ended', playback_position = ?, playback_updated_at = ?, ended_at = ?, end_reason = 'media_ended', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [position, endedAt, endedAt, roomId]);
+      cancelRoomEmptyTimer(roomId);
       broadcastRoom(roomId, { type: 'room_ended', roomId, endedAt, reason: 'media_ended' });
+      broadcastRoomDirectoryChanged();
       return;
     }
     const playbackState = action === 'pause' ? 'paused' : action === 'play' ? 'playing' : room.playback_state;
@@ -532,7 +534,9 @@ async function handleRoomSocketMessage(socket, raw) {
   if (data.type === 'room_end') {
     const endedAt = new Date().toISOString();
     await database.run("UPDATE rooms SET status = 'ended', playback_state = 'ended', ended_at = ?, end_reason = 'host_ended', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [endedAt, roomId]);
+    cancelRoomEmptyTimer(roomId);
     broadcastRoom(roomId, { type: 'room_ended', roomId, endedAt, reason: 'host_ended' });
+    broadcastRoomDirectoryChanged();
   }
 }
 
