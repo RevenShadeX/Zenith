@@ -30,6 +30,8 @@ const state = {
   seasonHistory: [],
   studyRefreshTimer: null,
   liveRefreshTimer: null,
+  roomRefreshTimer: null,
+  roomJoinReadyForSocket: null,
   playbackSyncTimer: null,
 };
 
@@ -647,7 +649,11 @@ function connectRoomSocket(roomId) {
   state.connectingRoomId = roomId;
   state.socketConnectPromise = (async () => {
     try {
-      await fetchJson(`/api/rooms/${encodeURIComponent(roomId)}/join`, { method: 'POST' });
+      if (state.roomJoinReadyForSocket === roomId) {
+        state.roomJoinReadyForSocket = null;
+      } else {
+        await fetchJson(`/api/rooms/${encodeURIComponent(roomId)}/join`, { method: 'POST' });
+      }
       if (state.page !== 'watch' || state.roomId !== roomId) return;
       if (state.socket) state.socket.close();
       const scheme = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -856,6 +862,7 @@ async function handleClick(event) {
       const { room } = await fetchJson(`/api/rooms/${roomId}/join`, { method: 'POST' });
       state.rooms = [room, ...state.rooms.filter((entry) => entry.id !== room.id)];
       state.roomId = room.id;
+      state.roomJoinReadyForSocket = room.id;
       state.messages = [];
       state.activeUsers = [];
       state.playback = null;
@@ -962,6 +969,7 @@ async function handleSubmit(event) {
       });
       state.rooms = [room, ...state.rooms.filter((entry) => entry.id !== room.id)];
       state.roomId = room.id;
+      state.roomJoinReadyForSocket = room.id;
       state.messages = [];
       state.playback = { state: 'paused', position: 0, serverTime: Date.now() };
       showToast('Your room is open.', 'success');
@@ -1071,15 +1079,17 @@ async function loadInitial() {
 
   loadSavedGame();
   if (state.user) {
-    await Promise.all([
+    // These are non-critical for opening a watch room; do not block the first paint/player.
+    Promise.all([
       refreshDailyGame(),
       refreshMissions(),
       fetchJson('/api/seasons/history').then((response) => { state.seasonHistory = response.history || []; }).catch(() => { state.seasonHistory = []; }),
-    ]);
+    ]).catch(() => {});
   }
   if (state.page === 'watch' && state.roomId && state.user) {
     try {
       await fetchJson(`/api/rooms/${encodeURIComponent(state.roomId)}/join`, { method: 'POST' });
+      state.roomJoinReadyForSocket = state.roomId;
       const [snapshot, chat] = await Promise.all([
         fetchJson(`/api/rooms/${encodeURIComponent(state.roomId)}`),
         fetchJson(`/api/rooms/${encodeURIComponent(state.roomId)}/messages`),
