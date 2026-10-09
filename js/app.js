@@ -552,13 +552,21 @@ function updateRoomRecord(room) {
   }
 }
 
+function playbackPositionNow(playback = state.playback) {
+  const position = Number(playback?.position || 0);
+  const serverTime = Number(playback?.serverTime);
+  if (playback?.state !== 'playing' || !Number.isFinite(serverTime)) return position;
+  return Math.max(0, position + Math.max(0, Date.now() - serverTime) / 1000);
+}
+
 async function applyRoomSnapshot(message) {
   updateRoomRecord(message.room);
   updateRoomPresence(message.viewerCount ?? message.room?.viewer_count, message.users || []);
   state.playback = message.playback || state.playback;
   if (state.playback && state.mediaProvider) {
-    await state.mediaProvider.apply('seek', state.playback.position);
-    await state.mediaProvider.apply(state.playback.state === 'playing' ? 'play' : 'pause', state.playback.position);
+    const position = playbackPositionNow(state.playback);
+    await state.mediaProvider.apply('seek', position);
+    await state.mediaProvider.apply(state.playback.state === 'playing' ? 'play' : 'pause', position);
   }
 }
 
@@ -718,8 +726,9 @@ function mountWatchPlayer() {
     const mountedProvider = state.mediaProvider;
     Promise.resolve(mountedProvider.mount(container)).then(async () => {
       if (state.playback && state.mediaProvider === mountedProvider) {
-        await mountedProvider.apply('seek', state.playback.position);
-        await mountedProvider.apply(state.playback.state === 'playing' ? 'play' : 'pause', state.playback.position);
+        const position = playbackPositionNow(state.playback);
+        await mountedProvider.apply('seek', position);
+        await mountedProvider.apply(state.playback.state === 'playing' ? 'play' : 'pause', position);
       }
       if (host && state.mediaProvider === mountedProvider) {
         state.playbackSyncTimer = window.setInterval(async () => {
