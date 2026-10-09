@@ -193,7 +193,7 @@ class EmbedProvider {
 
   async getCurrentTime() {
     if (!this.player) return null;
-    return this.media.provider === 'youtube' ? this.player.getCurrentTime() : this.player.getCurrentTime();
+    return await this.player.getCurrentTime();
   }
 
   async apply(action, position) {
