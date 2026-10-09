@@ -30,6 +30,7 @@ const state = {
   seasonHistory: [],
   studyRefreshTimer: null,
   liveRefreshTimer: null,
+  playbackSyncTimer: null,
 };
 
 const appEl = document.querySelector('#app');
@@ -38,6 +39,8 @@ const toastEl = document.querySelector('#toast');
 let toastTimer;
 
 function closeCurrentRoomConnection() {
+  window.clearInterval(state.playbackSyncTimer);
+  state.playbackSyncTimer = null;
   if (state.socket) {
     if (state.socket.readyState === WebSocket.OPEN) state.socket.send(JSON.stringify({ type: 'leave_room' }));
     state.socket.close(1000, 'Navigation');
@@ -47,6 +50,8 @@ function closeCurrentRoomConnection() {
   state.mediaProvider?.destroy();
   state.mediaProvider = null;
   window.clearTimeout(state.reconnectTimer);
+  window.clearInterval(state.playbackSyncTimer);
+  state.playbackSyncTimer = null;
 }
 
 async function fetchJson(url, options = {}) {
@@ -648,6 +653,8 @@ function mountWatchPlayer() {
   const container = document.querySelector('#watchPlayer');
   if (!room || !container || !window.ZenithMediaProviders) return;
   state.mediaProvider?.destroy();
+  window.clearInterval(state.playbackSyncTimer);
+  state.playbackSyncTimer = null;
   const media = {
     provider: room.media_provider,
     source_url: room.media_url,
@@ -663,10 +670,26 @@ function mountWatchPlayer() {
         }
       },
     });
-    Promise.resolve(state.mediaProvider.mount(container)).then(async () => {
-      if (state.playback && state.mediaProvider) {
-        await state.mediaProvider.apply('seek', state.playback.position);
-        if (state.playback.state === 'playing') await state.mediaProvider.apply('play', state.playback.position);
+    const mountedProvider = state.mediaProvider;
+    Promise.resolve(mountedProvider.mount(container)).then(async () => {
+      if (state.playback && state.mediaProvider === mountedProvider) {
+        await mountedProvider.apply('seek', state.playback.position);
+        await mountedProvider.apply(state.playback.state === 'playing' ? 'play' : 'pause', state.playback.position);
+      }
+      if (host && state.mediaProvider === mountedProvider) {
+        state.playbackSyncTimer = window.setInterval(async () => {
+          if (state.page !== 'watch' || state.roomId !== room.id ||
+              state.socket?.readyState !== WebSocket.OPEN ||
+              state.playback?.state !== 'playing') return;
+          try {
+            const position = await mountedProvider.getCurrentTime?.();
+            if (Number.isFinite(Number(position))) {
+              state.socket.send(JSON.stringify({ type: 'playback', action: 'sync', position: Number(position) }));
+            }
+          } catch {
+            // A provider can briefly be unavailable while buffering.
+          }
+        }, 3000);
       }
     }).catch((error) => {
       container.textContent = error.message || 'This media provider could not be loaded.';
@@ -906,8 +929,8 @@ async function handleSubmit(event) {
       state.playback = { state: 'paused', position: 0 };
       renderApp();
       showToast('Media source updated for everyone.', 'success');
-    } else if (form.id === 'chatForm') {
-      const text = new FormData(form).get('text').trim();
+    } else if (form.id === 'chatForm' || form.id === 'fullscreenChatForm') {
+      const text = String(new FormData(form).get('text') || '').trim();
       if (!text || !state.socket || state.socket.readyState !== WebSocket.OPEN) throw new Error('Chat is reconnecting. Try again in a moment.');
       state.socket.send(JSON.stringify({ type: 'chat_message', roomId: state.roomId, text }));
       form.reset();
