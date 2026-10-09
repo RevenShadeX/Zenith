@@ -50,8 +50,6 @@ function closeCurrentRoomConnection() {
   state.mediaProvider?.destroy();
   state.mediaProvider = null;
   window.clearTimeout(state.reconnectTimer);
-  window.clearInterval(state.playbackSyncTimer);
-  state.playbackSyncTimer = null;
 }
 
 async function fetchJson(url, options = {}) {
