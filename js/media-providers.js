@@ -60,7 +60,7 @@ class DirectVideoProvider {
     video.className = 'watch-video';
     video.controls = this.host;
     video.playsInline = true;
-    video.preload = 'metadata';
+    video.preload = 'auto';
     video.src = this.media.source_url;
     video.addEventListener('play', () => this.emit('play'));
     video.addEventListener('pause', () => this.emit('pause'));
