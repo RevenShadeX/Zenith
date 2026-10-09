@@ -84,8 +84,11 @@ class DirectVideoProvider {
     this.applying = true;
     try {
       if (action === 'seek') this.video.currentTime = position;
-      if (action === 'sync' && Math.abs(this.video.currentTime - position) > 1.5) this.video.currentTime = position;
-      if (action === 'play') await this.video.play();
+      if (action === 'sync' && Math.abs(this.video.currentTime - position) > 0.75) this.video.currentTime = position;
+      if (action === 'play') {
+        this.video.currentTime = position;
+        await this.video.play();
+      }
       if (action === 'pause') this.video.pause();
     } catch {
       document.querySelector('#playbackHint')?.classList.remove('is-hidden');
@@ -202,13 +205,19 @@ class EmbedProvider {
     try {
       if (this.media.provider === 'youtube') {
         if (action === 'seek') this.player.seekTo(position, true);
-        if (action === 'sync' && Math.abs(this.player.getCurrentTime() - position) > 1.5) this.player.seekTo(position, true);
-        if (action === 'play') this.player.playVideo();
+        if (action === 'sync' && Math.abs(this.player.getCurrentTime() - position) > 0.75) this.player.seekTo(position, true);
+        if (action === 'play') {
+          this.player.seekTo(position, true);
+          this.player.playVideo();
+        }
         if (action === 'pause') this.player.pauseVideo();
       } else {
         if (action === 'seek') await this.player.setCurrentTime(position);
-        if (action === 'sync' && Math.abs(await this.player.getCurrentTime() - position) > 1.5) await this.player.setCurrentTime(position);
-        if (action === 'play') await this.player.play();
+        if (action === 'sync' && Math.abs(await this.player.getCurrentTime() - position) > 0.75) await this.player.setCurrentTime(position);
+        if (action === 'play') {
+          await this.player.setCurrentTime(position);
+          await this.player.play();
+        }
         if (action === 'pause') await this.player.pause();
       }
     } catch {
