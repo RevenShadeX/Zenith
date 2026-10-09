@@ -572,7 +572,13 @@ async function handleRoomSocketMessage(event, roomId) {
     appendChatMessage(message.message);
   } else if (message.type === 'playback_sync') {
     state.playback = { state: message.state, position: message.position, serverTime: message.serverTime };
-    if (message.by !== state.user?.id) await state.mediaProvider?.apply(message.action, message.position);
+    if (message.by !== state.user?.id && state.mediaProvider) {
+      const elapsed = message.state === 'playing' && Number.isFinite(Number(message.serverTime))
+        ? Math.max(0, (Date.now() - Number(message.serverTime)) / 1000)
+        : 0;
+      const targetPosition = Number(message.position) + (['play', 'sync'].includes(message.action) ? elapsed : 0);
+      await state.mediaProvider.apply(message.action, targetPosition);
+    }
   } else if (message.type === 'media_changed') {
     updateRoomRecord(message.room);
     state.playback = { state: 'paused', position: 0 };
@@ -687,7 +693,7 @@ function mountWatchPlayer() {
           } catch {
             // A provider can briefly be unavailable while buffering.
           }
-        }, 3000);
+        }, 1000);
       }
     }).catch((error) => {
       container.textContent = error.message || 'This media provider could not be loaded.';
@@ -932,6 +938,10 @@ async function handleSubmit(event) {
       if (!text || !state.socket || state.socket.readyState !== WebSocket.OPEN) throw new Error('Chat is reconnecting. Try again in a moment.');
       state.socket.send(JSON.stringify({ type: 'chat_message', roomId: state.roomId, text }));
       form.reset();
+      // Re-enable the send control after the server-side anti-spam window.
+      if (submit) window.setTimeout(() => {
+        if (submit.isConnected) submit.disabled = false;
+      }, 750);
     } else if (form.id === 'guessForm') {
       const guess = new FormData(form).get('guess').trim().toUpperCase();
       const { result, solved, answer } = await fetchJson('/api/games/daily-word/guess', {
