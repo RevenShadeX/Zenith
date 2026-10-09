@@ -90,8 +90,8 @@ class DirectVideoProvider {
         await this.video.play();
       }
       if (action === 'pause') {
-        if (Math.abs(this.video.currentTime - position) > 0.35) this.video.currentTime = position;
         this.video.pause();
+        if (Math.abs(this.video.currentTime - position) > 0.35) this.video.currentTime = position;
       }
     } catch {
       document.querySelector('#playbackHint')?.classList.remove('is-hidden');
@@ -214,8 +214,8 @@ class EmbedProvider {
           this.player.playVideo();
         }
         if (action === 'pause') {
-          if (Math.abs(this.player.getCurrentTime() - position) > 0.75) this.player.seekTo(position, true);
           this.player.pauseVideo();
+          if (Math.abs(this.player.getCurrentTime() - position) > 0.75) this.player.seekTo(position, true);
         }
       } else {
         if (action === 'seek') await this.player.setCurrentTime(position);
@@ -225,8 +225,8 @@ class EmbedProvider {
           await this.player.play();
         }
         if (action === 'pause') {
-          if (Math.abs(await this.player.getCurrentTime() - position) > 0.75) await this.player.setCurrentTime(position);
           await this.player.pause();
+          if (Math.abs(await this.player.getCurrentTime() - position) > 0.75) await this.player.setCurrentTime(position);
         }
       }
     } catch {
