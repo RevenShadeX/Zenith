@@ -114,7 +114,15 @@ async function refreshLiveHome() {
   }
 }
 
+let roomRefreshInFlight = false;
+let roomRefreshPending = false;
+
 async function refreshRooms() {
+  if (roomRefreshInFlight) {
+    roomRefreshPending = true;
+    return;
+  }
+  roomRefreshInFlight = true;
   try {
     const response = await fetchJson('/api/rooms');
     const rooms = response.rooms || [];
@@ -142,6 +150,12 @@ async function refreshRooms() {
     }
   } catch {
     // Keep the last known room list if a background refresh fails.
+  } finally {
+    roomRefreshInFlight = false;
+    if (roomRefreshPending) {
+      roomRefreshPending = false;
+      void refreshRooms();
+    }
   }
 }
 
