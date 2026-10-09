@@ -89,7 +89,10 @@ class DirectVideoProvider {
         this.video.currentTime = position;
         await this.video.play();
       }
-      if (action === 'pause') this.video.pause();
+      if (action === 'pause') {
+        if (Math.abs(this.video.currentTime - position) > 0.35) this.video.currentTime = position;
+        this.video.pause();
+      }
     } catch {
       document.querySelector('#playbackHint')?.classList.remove('is-hidden');
     } finally {
@@ -210,7 +213,10 @@ class EmbedProvider {
           this.player.seekTo(position, true);
           this.player.playVideo();
         }
-        if (action === 'pause') this.player.pauseVideo();
+        if (action === 'pause') {
+          if (Math.abs(this.player.getCurrentTime() - position) > 0.75) this.player.seekTo(position, true);
+          this.player.pauseVideo();
+        }
       } else {
         if (action === 'seek') await this.player.setCurrentTime(position);
         if (action === 'sync' && Math.abs(await this.player.getCurrentTime() - position) > 0.75) await this.player.setCurrentTime(position);
@@ -218,7 +224,10 @@ class EmbedProvider {
           await this.player.setCurrentTime(position);
           await this.player.play();
         }
-        if (action === 'pause') await this.player.pause();
+        if (action === 'pause') {
+          if (Math.abs(await this.player.getCurrentTime() - position) > 0.75) await this.player.setCurrentTime(position);
+          await this.player.pause();
+        }
       }
     } catch {
       document.querySelector('#playbackHint')?.classList.remove('is-hidden');
