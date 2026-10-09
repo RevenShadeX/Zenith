@@ -95,6 +95,30 @@ test('default runtime enforces Discord identity and synchronizes host-controlled
   }
 
   assert.equal((await request('/api/me')).status, 401);
+
+  // Verify the same-origin static assets referenced by index.html are actually served.
+  const pageResponse = await request('/');
+  assert.equal(pageResponse.status, 200);
+  const pageHtml = await pageResponse.text();
+  assert.match(pageHtml, /href="\/css\/style\.css\?v=6"/);
+  assert.match(pageHtml, /src="\/js\/media-providers\.js\?v=9"/);
+  assert.match(pageHtml, /src="\/js\/app\.js\?v=10"/);
+
+  const cssResponse = await request('/css/style.css?v=6');
+  assert.equal(cssResponse.status, 200);
+  assert.match(cssResponse.headers.get('content-type') || '', /text\/css/i);
+  assert.match(await cssResponse.text(), /:root\s*\{/);
+
+  const mediaScriptResponse = await request('/js/media-providers.js?v=9');
+  assert.equal(mediaScriptResponse.status, 200);
+  assert.match(mediaScriptResponse.headers.get('content-type') || '', /javascript/i);
+  assert.match(await mediaScriptResponse.text(), /class DirectVideoProvider/);
+
+  const appScriptResponse = await request('/js/app.js?v=10');
+  assert.equal(appScriptResponse.status, 200);
+  assert.match(appScriptResponse.headers.get('content-type') || '', /javascript/i);
+  assert.match(await appScriptResponse.text(), /function playbackPositionNow/);
+
   const login = await request('/auth/discord');
   assert.equal(login.status, 503);
 
