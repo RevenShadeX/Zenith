@@ -352,7 +352,9 @@ function scheduleRoomAutoClose(roomId) {
     if (currentClients && currentClients.size > 0) return;
     try {
       const room = await database.get("SELECT id, status FROM rooms WHERE id = ?", [roomId]);
-      if (!room || room.status !== 'live') return;
+      // A member may have joined while the database lookup was in flight.
+      // Recheck the live socket set immediately before closing the room.
+      if (!room || room.status !== 'live' || (roomSockets.get(roomId)?.size || 0) > 0) return;
       const endedAt = new Date().toISOString();
       await database.run("UPDATE rooms SET status = 'ended', playback_state = 'ended', ended_at = ?, end_reason = 'empty_room', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'live'", [endedAt, roomId]);
       broadcastRoom(roomId, { type: 'room_ended', roomId, endedAt, reason: 'empty_room' });
