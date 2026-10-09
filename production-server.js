@@ -461,8 +461,9 @@ async function handleRoomSocketMessage(socket, raw) {
     }
     const playbackState = action === 'pause' ? 'paused' : action === 'play' ? 'playing' : room.playback_state;
     const updatedAt = new Date().toISOString();
-    await database.run('UPDATE rooms SET playback_state = ?, playback_position = ?, playback_updated_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [playbackState, position, updatedAt, roomId]);
+    // Broadcast control changes before waiting for the database write so viewers react with minimal delay.
     broadcastRoom(roomId, { type: 'playback_sync', roomId, action, state: playbackState, position, serverTime: Date.now(), by: socket.userId });
+    await database.run('UPDATE rooms SET playback_state = ?, playback_position = ?, playback_updated_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?', [playbackState, position, updatedAt, roomId]);
     return;
   }
 
