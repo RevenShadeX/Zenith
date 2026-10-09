@@ -595,6 +595,10 @@ async function handleRoomSocketMessage(event, roomId) {
   } catch {
     return;
   }
+  if (message.type === 'rooms_changed') {
+    refreshRooms();
+    return;
+  }
   if (message.roomId && message.roomId !== state.roomId) return;
 
   if (message.type === 'room_snapshot' || message.type === 'room_state') {
@@ -1145,7 +1149,7 @@ async function boot() {
   window.clearInterval(state.roomRefreshTimer);
   state.roomRefreshTimer = window.setInterval(() => {
     if (state.page === 'home' || state.page === 'rooms') refreshRooms();
-  }, 4000);
+  }, 2000);
 }
 
 boot();
