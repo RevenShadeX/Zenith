@@ -542,7 +542,7 @@ async function requireRoomHost(req, res) {
 
 function createApp() {
   app.disable('x-powered-by');
-  if (IS_PRODUCTION) app.set('trust proxy', 1);
+  app.set('trust proxy', 1);
 
   app.use(helmet({
     strictTransportSecurity: USE_SECURE_COOKIES ? undefined : false,
