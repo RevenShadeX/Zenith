@@ -1058,27 +1058,90 @@ function handleInput(event) {
 }
 
 async function loadInitial() {
-  try {
-    const [meResponse, home] = await Promise.all([
-      fetch('/api/me', { credentials: 'same-origin' }),
-      fetchJson('/api/home'),
-    ]);
-    state.user = meResponse.ok ? (await meResponse.json()).user : null;
+  const directWatchRoute = state.page === 'watch' && state.roomId;
+  const mePromise = fetch('/api/me', { credentials: 'same-origin' }).then(async (response) => ({
+    user: response.ok ? (await response.json()).user : null,
+  }));
+  const homePromise = fetchJson('/api/home');
+
+  const applyHome = (home) => {
+    const activeRoom = state.page === 'watch'
+      ? state.rooms.find((room) => room.id === state.roomId)
+      : null;
     state.rooms = home.rooms || [];
+    if (activeRoom) {
+      const existingIndex = state.rooms.findIndex((room) => room.id === activeRoom.id);
+      if (existingIndex >= 0) state.rooms[existingIndex] = { ...state.rooms[existingIndex], ...activeRoom };
+      else state.rooms.unshift(activeRoom);
+    }
     state.events = home.events || [];
     state.leaderboard = home.leaderboard || [];
     state.latestMessages = home.latestMessages || [];
     state.tracking = home.tracking || null;
     state.memberCount = Number.isFinite(Number(state.tracking?.memberCount)) ? Number(state.tracking.memberCount) : null;
     state.status = home.status || null;
-  } catch (error) {
-    state.rooms = [];
-    state.events = [];
-    state.leaderboard = [];
-    state.latestMessages = [];
-    state.tracking = null;
-    state.status = null;
-    showToast('Zenith could not reach the server. Refresh to try again.', 'error');
+  };
+
+  if (directWatchRoute) {
+    // Load the requested room first. The general home dashboard and chat history
+    // must not block the player or its initial playback snapshot.
+    const requestedRoomId = state.roomId;
+    const watchPromise = (async () => {
+      await fetchJson(`/api/rooms/${encodeURIComponent(requestedRoomId)}/join`, { method: 'POST' });
+      const snapshot = await fetchJson(`/api/rooms/${encodeURIComponent(requestedRoomId)}`);
+      state.roomJoinReadyForSocket = requestedRoomId;
+      state.rooms = [snapshot.room, ...state.rooms.filter((room) => room.id !== snapshot.room.id)];
+      state.playback = snapshot.playback;
+      state.activeUsers = snapshot.users || [];
+
+      fetchJson(`/api/rooms/${encodeURIComponent(requestedRoomId)}/messages`).then(({ messages }) => {
+        if (state.page !== 'watch' || state.roomId !== requestedRoomId) return;
+        state.messages = messages || [];
+        const html = state.messages.length
+          ? state.messages.map(renderChatMessage).join('')
+          : '<div class="chat-empty">No messages yet.</div>';
+        for (const selector of ['#chatMessages', '#fullscreenChatMessages']) {
+          const chat = document.querySelector(selector);
+          if (chat) {
+            chat.innerHTML = html;
+            chat.scrollTop = chat.scrollHeight;
+          }
+        }
+      }).catch(() => {});
+    })();
+
+    const [meResult, watchResult] = await Promise.allSettled([mePromise, watchPromise]);
+    state.user = meResult.status === 'fulfilled' ? meResult.value.user : null;
+    if (!state.user || watchResult.status !== 'fulfilled') {
+      state.page = 'rooms';
+      state.roomId = null;
+      const error = watchResult.status === 'rejected' ? watchResult.reason : null;
+      showToast(error?.message || 'Sign in with Discord to join this room.', 'error');
+    }
+
+    // Populate the rest of the app without holding up the watch-room first paint.
+    homePromise.then((home) => {
+      applyHome(home);
+      renderTopbar();
+      if (state.page !== 'watch') renderApp();
+    }).catch(() => {
+      // Keep the room usable even if the non-critical home dashboard is unavailable.
+    });
+  } else {
+    try {
+      const [meResult, home] = await Promise.all([mePromise, homePromise]);
+      state.user = meResult.user;
+      applyHome(home);
+    } catch {
+      state.user = null;
+      state.rooms = [];
+      state.events = [];
+      state.leaderboard = [];
+      state.latestMessages = [];
+      state.tracking = null;
+      state.status = null;
+      showToast('Zenith could not reach the server. Refresh to try again.', 'error');
+    }
   }
 
   loadSavedGame();
@@ -1090,26 +1153,7 @@ async function loadInitial() {
       fetchJson('/api/seasons/history').then((response) => { state.seasonHistory = response.history || []; }).catch(() => { state.seasonHistory = []; }),
     ]).catch(() => {});
   }
-  if (state.page === 'watch' && state.roomId && state.user) {
-    try {
-      await fetchJson(`/api/rooms/${encodeURIComponent(state.roomId)}/join`, { method: 'POST' });
-      state.roomJoinReadyForSocket = state.roomId;
-      const [snapshot, chat] = await Promise.all([
-        fetchJson(`/api/rooms/${encodeURIComponent(state.roomId)}`),
-        fetchJson(`/api/rooms/${encodeURIComponent(state.roomId)}/messages`),
-      ]);
-      state.rooms = state.rooms.some((room) => room.id === snapshot.room.id)
-        ? state.rooms.map((room) => room.id === snapshot.room.id ? { ...room, ...snapshot.room } : room)
-        : [snapshot.room, ...state.rooms];
-      state.messages = chat.messages || [];
-      state.playback = snapshot.playback;
-      state.activeUsers = snapshot.users || [];
-    } catch (error) {
-      state.page = 'rooms';
-      state.roomId = null;
-      showToast(error.message, 'error');
-    }
-  } else if (state.page === 'room-ended' && state.roomId && state.user) {
+  if (state.page === 'room-ended' && state.roomId && state.user) {
     try {
       const snapshot = await fetchJson(`/api/rooms/${encodeURIComponent(state.roomId)}`);
       state.endedRoom = snapshot.room;
