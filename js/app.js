@@ -112,6 +112,37 @@ async function refreshLiveHome() {
   }
 }
 
+async function refreshRooms() {
+  try {
+    const response = await fetchJson('/api/rooms');
+    const rooms = response.rooms || [];
+    const signature = (items) => JSON.stringify(items.map((room) => ({
+      id: room.id, name: room.name, status: room.status, locked: room.locked,
+      viewer_count: room.viewer_count, host_user_id: room.host_user_id,
+    })));
+    if (signature(rooms) === signature(state.rooms)) return;
+    state.rooms = rooms;
+
+    if (state.page === 'rooms') {
+      const grid = document.querySelector('#roomGrid');
+      if (grid) grid.innerHTML = rooms.length
+        ? rooms.map(renderRoomCard).join('')
+        : '<div class="empty-state">No rooms available. Create the first one.</div>';
+      const count = document.querySelector('.room-count');
+      if (count) count.innerHTML = '<span class="status-dot"></span>' + rooms.length + ' LIVE';
+    } else if (state.page === 'home') {
+      const grid = document.querySelector('.page-section .room-grid');
+      if (grid) grid.innerHTML = rooms.length
+        ? rooms.slice(0, 3).map(renderRoomCard).join('')
+        : '<div class="empty-state">No rooms are live right now. Start one for your crew.</div>';
+      const roomSummary = document.querySelector('.visual-caption strong');
+      if (roomSummary) roomSummary.textContent = rooms.length + ' rooms are open';
+    }
+  } catch {
+    // Keep the last known room list if a background refresh fails.
+  }
+}
+
 async function refreshEvents() {
   try {
     const response = await fetchJson('/api/events');
@@ -823,16 +854,28 @@ async function handleClick(event) {
     try {
       const roomId = encodeURIComponent(control.dataset.roomId);
       const { room } = await fetchJson(`/api/rooms/${roomId}/join`, { method: 'POST' });
-      const { messages } = await fetchJson(`/api/rooms/${roomId}/messages`);
-      state.rooms = state.rooms.some((entry) => entry.id === room.id)
-        ? state.rooms.map((entry) => entry.id === room.id ? { ...entry, ...room } : entry)
-        : [room, ...state.rooms];
+      state.rooms = [room, ...state.rooms.filter((entry) => entry.id !== room.id)];
       state.roomId = room.id;
-      state.messages = messages || [];
+      state.messages = [];
       state.activeUsers = [];
-      await refreshMissions();
       state.playback = null;
       navigate('watch', room.id);
+      // Load chat history and missions in the background so they do not delay the player.
+      fetchJson(`/api/rooms/${roomId}/messages`).then(({ messages }) => {
+        if (state.page === 'watch' && state.roomId === room.id) {
+          state.messages = messages || [];
+          const chat = document.querySelector('#chatMessages');
+          const fullscreenChat = document.querySelector('#fullscreenChatMessages');
+          for (const target of [chat, fullscreenChat]) {
+            if (!target) continue;
+            target.innerHTML = state.messages.length
+              ? state.messages.map(renderChatMessage).join('')
+              : '<div class="chat-empty">No messages yet.</div>';
+            target.scrollTop = target.scrollHeight;
+          }
+        }
+      }).catch(() => {});
+      refreshMissions();
     } catch (error) {
       showToast(error.message, 'error');
       control.disabled = false;
@@ -917,12 +960,13 @@ async function handleSubmit(event) {
         method: 'POST',
         body: JSON.stringify({ name: data.get('name'), mediaUrl: data.get('mediaUrl') }),
       });
-      state.rooms.unshift(room);
+      state.rooms = [room, ...state.rooms.filter((entry) => entry.id !== room.id)];
       state.roomId = room.id;
       state.messages = [];
-      await refreshMissions();
+      state.playback = { state: 'paused', position: 0, serverTime: Date.now() };
       showToast('Your room is open.', 'success');
       navigate('watch', room.id);
+      refreshMissions();
     } else if (form.id === 'mediaForm') {
       const mediaUrl = new FormData(form).get('mediaUrl');
       const { room } = await fetchJson(`/api/rooms/${encodeURIComponent(state.roomId)}/media`, {
@@ -1088,6 +1132,10 @@ async function boot() {
   if (state.page === 'events') refreshEvents();
   window.clearInterval(state.liveRefreshTimer);
   state.liveRefreshTimer = window.setInterval(refreshLiveHome, 30000);
+  window.clearInterval(state.roomRefreshTimer);
+  state.roomRefreshTimer = window.setInterval(() => {
+    if (state.page === 'home' || state.page === 'rooms') refreshRooms();
+  }, 4000);
 }
 
 boot();
