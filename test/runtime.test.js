@@ -101,7 +101,7 @@ test('default runtime enforces Discord identity and synchronizes host-controlled
   assert.equal(pageResponse.status, 200);
   const pageHtml = await pageResponse.text();
   assert.match(pageHtml, /href="\/css\/style\.css\?v=6"/);
-  assert.match(pageHtml, /src="\/js\/media-providers\.js\?v=9"/);
+  assert.match(pageHtml, /src="\/js\/media-providers\.js\?v=10"/);
   assert.match(pageHtml, /src="\/js\/app\.js\?v=10"/);
 
   const cssResponse = await request('/css/style.css?v=6');
@@ -109,10 +109,14 @@ test('default runtime enforces Discord identity and synchronizes host-controlled
   assert.match(cssResponse.headers.get('content-type') || '', /text\/css/i);
   assert.match(await cssResponse.text(), /:root\s*\{/);
 
-  const mediaScriptResponse = await request('/js/media-providers.js?v=9');
+  const mediaScriptResponse = await request('/js/media-providers.js?v=10');
   assert.equal(mediaScriptResponse.status, 200);
   assert.match(mediaScriptResponse.headers.get('content-type') || '', /javascript/i);
-  assert.match(await mediaScriptResponse.text(), /class DirectVideoProvider/);
+  const mediaScript = await mediaScriptResponse.text();
+  assert.match(mediaScript, /class DirectVideoProvider/);
+  const youtubePauseStart = mediaScript.indexOf("if (action === 'pause') {", mediaScript.indexOf("if (this.media.provider === 'youtube')"));
+  const youtubePauseBlock = mediaScript.slice(youtubePauseStart, mediaScript.indexOf("\n        }", youtubePauseStart));
+  assert.ok(youtubePauseBlock.indexOf("seekTo(position, true)") < youtubePauseBlock.indexOf("pauseVideo()"), "YouTube pause must seek before issuing the final pause");
 
   const appScriptResponse = await request('/js/app.js?v=10');
   assert.equal(appScriptResponse.status, 200);
