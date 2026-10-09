@@ -75,11 +75,16 @@ class DirectVideoProvider {
     if (this.host && !this.applying && this.video) this.onAction(action, this.video.currentTime);
   }
 
+  getCurrentTime() {
+    return this.video ? this.video.currentTime : null;
+  }
+
   async apply(action, position) {
     if (!this.video) return;
     this.applying = true;
     try {
       if (action === 'seek') this.video.currentTime = position;
+      if (action === 'sync' && Math.abs(this.video.currentTime - position) > 1.5) this.video.currentTime = position;
       if (action === 'play') await this.video.play();
       if (action === 'pause') this.video.pause();
     } catch {
@@ -186,16 +191,23 @@ class EmbedProvider {
     }
   }
 
+  async getCurrentTime() {
+    if (!this.player) return null;
+    return this.media.provider === 'youtube' ? this.player.getCurrentTime() : this.player.getCurrentTime();
+  }
+
   async apply(action, position) {
     if (!this.player) return;
     this.applying = true;
     try {
       if (this.media.provider === 'youtube') {
         if (action === 'seek') this.player.seekTo(position, true);
+        if (action === 'sync' && Math.abs(this.player.getCurrentTime() - position) > 1.5) this.player.seekTo(position, true);
         if (action === 'play') this.player.playVideo();
         if (action === 'pause') this.player.pauseVideo();
       } else {
         if (action === 'seek') await this.player.setCurrentTime(position);
+        if (action === 'sync' && Math.abs(await this.player.getCurrentTime() - position) > 1.5) await this.player.setCurrentTime(position);
         if (action === 'play') await this.player.play();
         if (action === 'pause') await this.player.pause();
       }
