@@ -1071,7 +1071,8 @@ async function loadInitial() {
   const mePromise = fetch('/api/me', { credentials: 'same-origin' }).then(async (response) => ({
     user: response.ok ? (await response.json()).user : null,
   }));
-  const homePromise = fetchJson('/api/home');
+  // Convert the background request to a settled result immediately so a slow room join cannot leave an unhandled rejection.
+  const homePromise = fetchJson('/api/home').then((home) => ({ home }), (error) => ({ error }));
 
   const applyHome = (home) => {
     const activeRoom = state.page === 'watch'
@@ -1129,18 +1130,18 @@ async function loadInitial() {
     }
 
     // Populate the rest of the app without holding up the watch-room first paint.
-    homePromise.then((home) => {
-      applyHome(home);
+    homePromise.then((result) => {
+      if (!result.home) return;
+      applyHome(result.home);
       renderTopbar();
       if (state.page !== 'watch') renderApp();
-    }).catch(() => {
-      // Keep the room usable even if the non-critical home dashboard is unavailable.
     });
   } else {
     try {
-      const [meResult, home] = await Promise.all([mePromise, homePromise]);
+      const [meResult, homeResult] = await Promise.all([mePromise, homePromise]);
+      if (!homeResult.home) throw homeResult.error || new Error('Home data is unavailable.');
       state.user = meResult.user;
-      applyHome(home);
+      applyHome(homeResult.home);
     } catch {
       state.user = null;
       state.rooms = [];
