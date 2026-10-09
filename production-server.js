@@ -37,6 +37,8 @@ const SESSION_COOKIE_NAME = USE_SECURE_COOKIES ? '__Host-zenith.sid' : 'zenith.s
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const database = createDatabase({ databaseUrl: DATABASE_URL });
 const roomSockets = new Map();
+const roomEmptyTimers = new Map();
+const ROOM_EMPTY_GRACE_MS = 20000;
 const activeConnections = new Set();
 const connectionCleanups = new Set();
 const app = express();
@@ -328,6 +330,42 @@ function broadcastRoom(roomId, payload) {
   for (const socket of clients) sendSocket(socket, payload);
 }
 
+function broadcastRoomDirectoryChanged() {
+  for (const socket of activeConnections) {
+    if (socket.readyState === WebSocket.OPEN) sendSocket(socket, { type: 'rooms_changed' });
+  }
+}
+
+function cancelRoomEmptyTimer(roomId) {
+  const timer = roomEmptyTimers.get(roomId);
+  if (timer) clearTimeout(timer);
+  roomEmptyTimers.delete(roomId);
+}
+
+function scheduleRoomAutoClose(roomId) {
+  cancelRoomEmptyTimer(roomId);
+  const clients = roomSockets.get(roomId);
+  if (clients && clients.size > 0) return;
+  const timer = setTimeout(async () => {
+    roomEmptyTimers.delete(roomId);
+    const currentClients = roomSockets.get(roomId);
+    if (currentClients && currentClients.size > 0) return;
+    try {
+      const room = await database.get("SELECT id, status FROM rooms WHERE id = ?", [roomId]);
+      if (!room || room.status !== 'live') return;
+      const endedAt = new Date().toISOString();
+      await database.run("UPDATE rooms SET status = 'ended', playback_state = 'ended', ended_at = ?, end_reason = 'empty_room', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'live'", [endedAt, roomId]);
+      broadcastRoom(roomId, { type: 'room_ended', roomId, endedAt, reason: 'empty_room' });
+      broadcastRoomDirectoryChanged();
+      console.log(`Watch room ${roomId} automatically closed after remaining empty.`);
+    } catch (error) {
+      console.error('Empty room auto-close failed:', error.message);
+    }
+  }, ROOM_EMPTY_GRACE_MS);
+  timer.unref?.();
+  roomEmptyTimers.set(roomId, timer);
+}
+
 function broadcastPresence(roomId) {
   broadcastRoom(roomId, {
     type: 'presence',
@@ -379,6 +417,7 @@ async function removeSocketFromRoom(socket, removeMembership = true) {
   }
   if (!userStillConnected) broadcastRoom(roomId, { type: 'user_left', roomId, userId: socket.userId });
   broadcastPresence(roomId);
+  if (!(roomSockets.get(roomId)?.size)) scheduleRoomAutoClose(roomId);
 }
 
 function hostOnly(socket, room) {
@@ -405,6 +444,7 @@ async function handleRoomSocketMessage(socket, raw) {
 
     if (socket.roomId && socket.roomId !== roomId) await removeSocketFromRoom(socket);
     socket.roomId = roomId;
+    cancelRoomEmptyTimer(roomId);
     const clients = roomSockets.get(roomId) || new Set();
     clients.add(socket);
     roomSockets.set(roomId, clients);
@@ -800,6 +840,8 @@ function createApp() {
     await database.run('INSERT INTO rooms (id, name, host_user_id, media_provider, media_url) VALUES (?, ?, ?, ?, ?)', [id, name, user.discord_user_id, media.provider, media.source_url]);
     await database.run('INSERT OR IGNORE INTO room_members (room_id, discord_user_id) VALUES (?, ?)', [id, user.discord_user_id]);
     const room = await database.get('SELECT r.*, u.display_name AS host_display_name, u.avatar AS host_avatar FROM rooms r LEFT JOIN users u ON u.discord_user_id = r.host_user_id WHERE r.id = ?', [id]);
+    broadcastRoomDirectoryChanged();
+    scheduleRoomAutoClose(id);
     res.status(201).json({ room: publicRoom(room), media });
   }));
 
@@ -809,6 +851,7 @@ function createApp() {
     const existing = await database.get('SELECT discord_user_id FROM room_members WHERE room_id = ? AND discord_user_id = ?', [room.id, req.session.discordUserId]);
     if (!canJoinRoom(room, req.session.discordUserId, Boolean(existing))) return res.status(403).json({ error: 'This room is locked.' });
     await database.run('INSERT OR IGNORE INTO room_members (room_id, discord_user_id) VALUES (?, ?)', [room.id, req.session.discordUserId]);
+    cancelRoomEmptyTimer(room.id);
     const snapshot = await roomSnapshot(room.id);
     res.json({ ok: true, room: snapshot.room });
   }));
@@ -824,6 +867,7 @@ function createApp() {
       }
     }
     await database.run('DELETE FROM room_members WHERE room_id = ? AND discord_user_id = ?', [room.id, req.session.discordUserId]);
+    if (!(roomSockets.get(room.id)?.size)) scheduleRoomAutoClose(room.id);
     res.json({ ok: true });
   }));
 
@@ -863,7 +907,9 @@ function createApp() {
     if (!roomHost) return;
     const endedAt = new Date().toISOString();
     await database.run("UPDATE rooms SET status = 'ended', playback_state = 'ended', ended_at = ?, end_reason = 'host_ended', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [endedAt, roomHost.id]);
+    cancelRoomEmptyTimer(roomHost.id);
     broadcastRoom(roomHost.id, { type: 'room_ended', roomId: roomHost.id, endedAt, reason: 'host_ended' });
+    broadcastRoomDirectoryChanged();
     res.json({ ok: true, roomId: roomHost.id, endedAt, reason: 'host_ended' });
   }));
 
