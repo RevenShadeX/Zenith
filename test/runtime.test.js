@@ -102,7 +102,7 @@ test('default runtime enforces Discord identity and synchronizes host-controlled
   const pageHtml = await pageResponse.text();
   assert.match(pageHtml, /href="\/css\/style\.css\?v=6"/);
   assert.match(pageHtml, /src="\/js\/media-providers\.js\?v=10"/);
-  assert.match(pageHtml, /src="\/js\/app\.js\?v=10"/);
+  assert.match(pageHtml, /src="\/js\/app\.js\?v=11"/);
 
   const cssResponse = await request('/css/style.css?v=6');
   assert.equal(cssResponse.status, 200);
@@ -118,7 +118,7 @@ test('default runtime enforces Discord identity and synchronizes host-controlled
   const youtubePauseBlock = mediaScript.slice(youtubePauseStart, mediaScript.indexOf("\n        }", youtubePauseStart));
   assert.ok(youtubePauseBlock.indexOf("seekTo(position, true)") < youtubePauseBlock.indexOf("pauseVideo()"), "YouTube pause must seek before issuing the final pause");
 
-  const appScriptResponse = await request('/js/app.js?v=10');
+  const appScriptResponse = await request('/js/app.js?v=11');
   assert.equal(appScriptResponse.status, 200);
   assert.match(appScriptResponse.headers.get('content-type') || '', /javascript/i);
   const appScript = await appScriptResponse.text();
