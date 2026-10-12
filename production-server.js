@@ -38,7 +38,7 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const database = createDatabase({ databaseUrl: DATABASE_URL });
 const roomSockets = new Map();
 const roomEmptyTimers = new Map();
-const ROOM_EMPTY_GRACE_MS = 20000;
+const ROOM_EMPTY_GRACE_MS = 60 * 60 * 1000;
 const activeConnections = new Set();
 const connectionCleanups = new Set();
 const app = express();
@@ -342,30 +342,44 @@ function cancelRoomEmptyTimer(roomId) {
   roomEmptyTimers.delete(roomId);
 }
 
-function scheduleRoomAutoClose(roomId) {
+function scheduleRoomAutoClose(roomId, emptySince = Date.now()) {
   cancelRoomEmptyTimer(roomId);
-  const clients = roomSockets.get(roomId);
-  if (clients && clients.size > 0) return;
+  if ((roomSockets.get(roomId)?.size || 0) > 0) return;
+  const parsedEmptySince = Number.isFinite(Number(emptySince)) ? Number(emptySince) : Date.now();
+  const delay = Math.max(0, ROOM_EMPTY_GRACE_MS - (Date.now() - parsedEmptySince));
   const timer = setTimeout(async () => {
     roomEmptyTimers.delete(roomId);
-    const currentClients = roomSockets.get(roomId);
-    if (currentClients && currentClients.size > 0) return;
+    if ((roomSockets.get(roomId)?.size || 0) > 0) return;
     try {
-      const room = await database.get("SELECT id, status FROM rooms WHERE id = ?", [roomId]);
-      // A member may have joined while the database lookup was in flight.
-      // Recheck the live socket set immediately before closing the room.
-      if (!room || room.status !== 'live' || (roomSockets.get(roomId)?.size || 0) > 0) return;
+      const room = await database.get("SELECT id, status, empty_since FROM rooms WHERE id = ?", [roomId]);
+      if (!room || room.status !== 'live' || !room.empty_since || (roomSockets.get(roomId)?.size || 0) > 0) return;
+      const persistedEmptySince = new Date(room.empty_since).getTime();
+      if (!Number.isFinite(persistedEmptySince)) return;
+      if (Date.now() - persistedEmptySince < ROOM_EMPTY_GRACE_MS) {
+        scheduleRoomAutoClose(roomId, persistedEmptySince);
+        return;
+      }
+      if ((roomSockets.get(roomId)?.size || 0) > 0) return;
       const endedAt = new Date().toISOString();
-      await database.run("UPDATE rooms SET status = 'ended', playback_state = 'ended', ended_at = ?, end_reason = 'empty_room', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'live'", [endedAt, roomId]);
+      const result = await database.run(
+        "UPDATE rooms SET status = 'ended', playback_state = 'ended', ended_at = ?, end_reason = 'empty_room', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'live' AND empty_since IS NOT NULL",
+        [endedAt, roomId]
+      );
+      if (!result.changes) return;
+      markRoomEnded(roomId);
       broadcastRoom(roomId, { type: 'room_ended', roomId, endedAt, reason: 'empty_room' });
       broadcastRoomDirectoryChanged();
       console.log(`Watch room ${roomId} automatically closed after remaining empty.`);
     } catch (error) {
       console.error('Empty room auto-close failed:', error.message);
     }
-  }, ROOM_EMPTY_GRACE_MS);
+  }, delay);
   timer.unref?.();
   roomEmptyTimers.set(roomId, timer);
+}
+
+function markRoomEnded(roomId) {
+  for (const socket of roomSockets.get(roomId) || []) socket.roomEnded = true;
 }
 
 function broadcastPresence(roomId) {
@@ -419,7 +433,11 @@ async function removeSocketFromRoom(socket, removeMembership = true) {
   }
   if (!userStillConnected) broadcastRoom(roomId, { type: 'user_left', roomId, userId: socket.userId });
   broadcastPresence(roomId);
-  if (!(roomSockets.get(roomId)?.size)) scheduleRoomAutoClose(roomId);
+  if (!(roomSockets.get(roomId)?.size)) {
+    const emptySince = new Date().toISOString();
+    await database.run("UPDATE rooms SET empty_since = ? WHERE id = ? AND status = 'live'", [emptySince, roomId]);
+    scheduleRoomAutoClose(roomId, Date.parse(emptySince));
+  }
 }
 
 function hostOnly(socket, room) {
@@ -445,8 +463,10 @@ async function handleRoomSocketMessage(socket, raw) {
     }
 
     if (socket.roomId && socket.roomId !== roomId) await removeSocketFromRoom(socket);
-    socket.roomId = roomId;
     cancelRoomEmptyTimer(roomId);
+    await database.run("UPDATE rooms SET empty_since = NULL WHERE id = ? AND status = 'live'", [roomId]);
+    socket.roomId = roomId;
+    socket.roomEnded = false;
     const clients = roomSockets.get(roomId) || new Set();
     clients.add(socket);
     roomSockets.set(roomId, clients);
@@ -466,17 +486,22 @@ async function handleRoomSocketMessage(socket, raw) {
     const roomId = socket.roomId;
     const now = Date.now();
     if (!roomId || data.roomId !== roomId) return;
-    const room = await database.get('SELECT status FROM rooms WHERE id = ?', [roomId]);
-    if (!room || room.status !== 'live') return sendSocket(socket, { type: 'room_ended', roomId, reason: 'ended' });
+    if (socket.roomEnded) return sendSocket(socket, { type: 'room_ended', roomId, reason: 'ended' });
     if (now - (socket.lastChatAt || 0) < 700) return sendSocket(socket, { type: 'error', error: 'Please wait before sending another message.' });
     const text = sanitizeText(data.text, 240);
     if (!text) return;
-    const messageResult = await database.run(
-      'INSERT INTO room_messages (room_id, discord_user_id, username, avatar, content) VALUES (?, ?, ?, ?, ?)',
-      [roomId, socket.userId, socket.user.username, socket.user.avatar, text]
-    );
-    const message = await database.get('SELECT * FROM room_messages WHERE id = ?', [messageResult.id]);
     socket.lastChatAt = now;
+    // Watch-room chat is ephemeral: broadcast directly without database reads or writes.
+    const message = {
+      id: crypto.randomUUID(),
+      room_id: roomId,
+      discord_user_id: socket.userId,
+      username: socket.user.username,
+      display_name: socket.user.displayName || socket.user.username,
+      avatar: socket.user.avatar || '',
+      content: text,
+      created_at: new Date(now).toISOString(),
+    };
     broadcastRoom(roomId, { type: 'chat_message', roomId, message });
     return;
   }
@@ -499,6 +524,7 @@ async function handleRoomSocketMessage(socket, raw) {
       const endedAt = new Date().toISOString();
       await database.run("UPDATE rooms SET status = 'ended', playback_state = 'ended', playback_position = ?, playback_updated_at = ?, ended_at = ?, end_reason = 'media_ended', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [position, endedAt, endedAt, roomId]);
       cancelRoomEmptyTimer(roomId);
+      markRoomEnded(roomId);
       broadcastRoom(roomId, { type: 'room_ended', roomId, endedAt, reason: 'media_ended' });
       broadcastRoomDirectoryChanged();
       return;
@@ -829,9 +855,6 @@ function createApp() {
   }));
 
   app.post('/api/rooms', requireSameOrigin, requireAuth, asyncRoute(async (req, res) => {
-    if (!discordBot?.isGuildOwner || !(await discordBot.isGuildOwner(req.session.discordUserId))) {
-      return res.status(403).json({ error: 'Only the Discord server owner can create watch rooms.' });
-    }
     const name = sanitizeText(req.body?.name, 80);
     if (!name) return res.status(400).json({ error: 'Room name is required.' });
     let media;
@@ -847,7 +870,7 @@ function createApp() {
     await database.run('INSERT OR IGNORE INTO room_members (room_id, discord_user_id) VALUES (?, ?)', [id, user.discord_user_id]);
     const room = await database.get('SELECT r.*, u.display_name AS host_display_name, u.avatar AS host_avatar FROM rooms r LEFT JOIN users u ON u.discord_user_id = r.host_user_id WHERE r.id = ?', [id]);
     broadcastRoomDirectoryChanged();
-    scheduleRoomAutoClose(id);
+    scheduleRoomAutoClose(id, Date.now());
     res.status(201).json({ room: publicRoom(room), media });
   }));
 
@@ -857,7 +880,6 @@ function createApp() {
     const existing = await database.get('SELECT discord_user_id FROM room_members WHERE room_id = ? AND discord_user_id = ?', [room.id, req.session.discordUserId]);
     if (!canJoinRoom(room, req.session.discordUserId, Boolean(existing))) return res.status(403).json({ error: 'This room is locked.' });
     await database.run('INSERT OR IGNORE INTO room_members (room_id, discord_user_id) VALUES (?, ?)', [room.id, req.session.discordUserId]);
-    cancelRoomEmptyTimer(room.id);
     const snapshot = await roomSnapshot(room.id);
     res.json({ ok: true, room: snapshot.room });
   }));
@@ -880,8 +902,8 @@ function createApp() {
   app.get('/api/rooms/:id/messages', requireAuth, asyncRoute(async (req, res) => {
     const membership = await database.get('SELECT discord_user_id FROM room_members WHERE room_id = ? AND discord_user_id = ?', [req.params.id, req.session.discordUserId]);
     if (!membership) return res.status(403).json({ error: 'Join the room to read its chat.' });
-    const messages = await database.all('SELECT * FROM room_messages WHERE room_id = ? ORDER BY created_at DESC LIMIT 50', [req.params.id]);
-    res.json({ messages: messages.reverse() });
+    // Compatibility endpoint: watch-room chat is not persisted, so history is always empty.
+    res.json({ messages: [] });
   }));
 
   app.patch('/api/rooms/:id/media', requireSameOrigin, requireAuth, asyncRoute(async (req, res) => {
@@ -914,6 +936,7 @@ function createApp() {
     const endedAt = new Date().toISOString();
     await database.run("UPDATE rooms SET status = 'ended', playback_state = 'ended', ended_at = ?, end_reason = 'host_ended', updated_at = CURRENT_TIMESTAMP WHERE id = ?", [endedAt, roomHost.id]);
     cancelRoomEmptyTimer(roomHost.id);
+    markRoomEnded(roomHost.id);
     broadcastRoom(roomHost.id, { type: 'room_ended', roomId: roomHost.id, endedAt, reason: 'host_ended' });
     broadcastRoomDirectoryChanged();
     res.json({ ok: true, roomId: roomHost.id, endedAt, reason: 'host_ended' });
@@ -1202,6 +1225,10 @@ function parseCommandDate(value) {
 }
 async function startServer() {
   await database.initialize();
+  const liveRooms = await database.all("SELECT id, empty_since FROM rooms WHERE status = 'live'");
+  for (const room of liveRooms) {
+    scheduleRoomAutoClose(room.id, room.empty_since ? Date.parse(room.empty_since) : Date.now());
+  }
   if (BOT_CONFIGURED) {
     discordBot = createDiscordBot({
       token: process.env.DISCORD_BOT_TOKEN,
