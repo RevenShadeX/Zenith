@@ -143,7 +143,9 @@ test('legacy SQLite migration preserves real Discord snowflakes and drops seeded
   assert.equal(members[0].admin, undefined);
   assert.deepEqual((await database.all('SELECT id FROM rooms')).map((room) => room.id), ['real-room']);
   assert.deepEqual((await database.all('SELECT id FROM events')).map((event) => event.id), ['real-event']);
-  assert.equal((await database.all('SELECT * FROM room_messages')).length, 1);
+  assert.equal((await database.all('SELECT * FROM room_messages')).length, 0, 'legacy room chat history is cleared because chat is ephemeral');
+  const roomColumns = await database.all('PRAGMA table_info(rooms)');
+  assert.ok(roomColumns.some((column) => column.name === 'empty_since'));
   assert.equal((await database.all('SELECT * FROM event_participants')).length, 1);
 });
 

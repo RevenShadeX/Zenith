@@ -139,6 +139,7 @@ function createDatabase(options = {}) {
         playback_updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         ended_at TEXT,
         end_reason TEXT,
+        empty_since TEXT DEFAULT CURRENT_TIMESTAMP,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`,
@@ -277,10 +278,12 @@ function createDatabase(options = {}) {
       ['playback_updated_at', "TEXT NOT NULL DEFAULT '1970-01-01T00:00:00.000Z'"],
       ['ended_at', 'TEXT'],
       ['end_reason', 'TEXT'],
+      ['empty_since', 'TEXT'],
     ];
     for (const [column, definition] of roomMigrations) {
       if (!existingRoomColumns.has(column)) await run(`ALTER TABLE rooms ADD COLUMN ${column} ${definition}`);
     }
+    await run("UPDATE rooms SET empty_since = CURRENT_TIMESTAMP WHERE status = 'live' AND empty_since IS NULL");
 
     const memberColumns = await all('PRAGMA table_info(room_members)');
     if (memberColumns.length && !memberColumns.some((column) => column.name === 'discord_user_id')) {
@@ -346,7 +349,8 @@ function createDatabase(options = {}) {
     await run('CREATE INDEX IF NOT EXISTS idx_discord_events_guild_created ON discord_message_events (guild_id, created_at)');
     await run('CREATE INDEX IF NOT EXISTS idx_discord_events_author_created ON discord_message_events (author_discord_user_id, created_at)');
     await run('CREATE INDEX IF NOT EXISTS idx_room_messages_room_created ON room_messages (room_id, created_at)');
-    await run("DELETE FROM room_messages WHERE discord_user_id = 'demo-user'");
+    // Room chat is intentionally ephemeral; remove any history written by older versions.
+    await run('DELETE FROM room_messages');
     await run("DELETE FROM room_members WHERE discord_user_id = 'demo-user'");
     await run("DELETE FROM event_participants WHERE discord_user_id = 'demo-user'");
     await run("DELETE FROM rooms WHERE id IN ('room-1', 'room-2') AND host_user_id = 'demo-user'");
@@ -397,6 +401,7 @@ function createDatabase(options = {}) {
         playback_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         ended_at TIMESTAMPTZ,
         end_reason TEXT,
+        empty_since TIMESTAMPTZ DEFAULT NOW(),
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       )`,
@@ -521,6 +526,8 @@ function createDatabase(options = {}) {
       'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS playback_updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()',
       'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS ended_at TIMESTAMPTZ',
       'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS end_reason TEXT',
+      'ALTER TABLE rooms ADD COLUMN IF NOT EXISTS empty_since TIMESTAMPTZ',
+      "UPDATE rooms SET empty_since = NOW() WHERE status = 'live' AND empty_since IS NULL",
       'ALTER TABLE events ADD COLUMN IF NOT EXISTS host_discord_user_id TEXT',
       'UPDATE events SET host_discord_user_id = \'\' WHERE host_discord_user_id IS NULL',
       'UPDATE users SET season_key = $1, season_xp = xp, season_points = points, season_message_count = tracked_message_count WHERE season_key IS NULL',
@@ -532,7 +539,8 @@ function createDatabase(options = {}) {
         await run(statement);
       }
     }
-    await run("DELETE FROM room_messages WHERE discord_user_id = 'demo-user'");
+    // Room chat is intentionally ephemeral; remove any history written by older versions.
+    await run('DELETE FROM room_messages');
     await run("DELETE FROM room_members WHERE discord_user_id = 'demo-user'");
     await run("DELETE FROM event_participants WHERE discord_user_id = 'demo-user'");
     await run("DELETE FROM rooms WHERE id IN ('room-1', 'room-2') AND host_user_id = 'demo-user'");
