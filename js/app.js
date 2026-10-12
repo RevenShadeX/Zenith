@@ -405,18 +405,18 @@ function renderHome() {
 }
 
 function renderRooms() {
-  const canCreateRoom = Boolean(state.user?.owner);
+  const canCreateRoom = Boolean(state.user);
   return `
     <section class="page-section page-heading"><span class="eyebrow">PICK YOUR CORNER</span><div class="heading-row"><div><h1>Open rooms</h1><p>Somewhere to watch, listen, or just be around people.</p></div>${canCreateRoom ? '<button class="button button-primary" type="button" data-action="focus-room-form">Create a room <span aria-hidden="true">＋</span></button>' : ''}</div></section>
     <section class="room-tools"><label class="search-field"><span aria-hidden="true">⌕</span><input id="roomSearch" type="search" placeholder="Find a room" aria-label="Search rooms" /></label><span class="room-count"><span class="status-dot"></span>${state.rooms.length} LIVE</span></section>
     <section class="room-grid room-grid-page" id="roomGrid">${state.rooms.length ? state.rooms.map(renderRoomCard).join('') : '<div class="empty-state">No rooms available. Create the first one.</div>'}</section>
-    <section class="create-room-section" id="createRoomSection">${canCreateRoom ? '<div class="create-room-copy"><span class="eyebrow">MAKE IT YOURS</span><h2>Start a watch party</h2><p>Bring your people and a direct video link. You can host the room right away.</p></div><form id="createRoomForm" class="form-grid"><label>Room name<input name="name" type="text" maxlength="80" placeholder="Friday night comfort movie" required /></label><label>Media source<input name="mediaUrl" type="url" placeholder="Direct video, YouTube, or Vimeo URL" required /></label><button class="button button-primary" type="submit">Open room <span aria-hidden="true">↗</span></button></form>' : '<div class="create-room-copy"><span class="eyebrow">WATCH PARTIES</span><h2>Join a room</h2><p>Watch parties are hosted by the server owner. Pick an open room above to join.</p></div>'}</section>
+    <section class="create-room-section" id="createRoomSection">${canCreateRoom ? '<div class="create-room-copy"><span class="eyebrow">MAKE IT YOURS</span><h2>Start a watch party</h2><p>Choose a room name and supported video link, then invite people to watch with you.</p></div><form id="createRoomForm" class="form-grid"><label>Room name<input name="name" type="text" maxlength="80" placeholder="Friday night comfort movie" required /></label><label>Media source<input name="mediaUrl" type="url" placeholder="Direct video, YouTube, or Vimeo URL" required /></label><button class="button button-primary" type="submit">Open room <span aria-hidden="true">↗</span></button></form>' : '<div class="create-room-copy"><span class="eyebrow">WATCH PARTIES</span><h2>Join a room</h2><p>Sign in to create a watch room or pick an open room above.</p></div>'}</section>
   `;
 }
 function renderWatch() {
   const room = state.rooms.find((entry) => entry.id === state.roomId);
   if (!room) return `<section class="page-section watch-empty"><span class="eyebrow">WATCH TOGETHER</span><h1>Choose a room.</h1><p>Pick a live room and settle in.</p><div class="room-grid">${state.rooms.map(renderRoomCard).join('')}</div></section>`;
-  const messages = state.messages.length ? state.messages : state.latestMessages.filter((message) => message.room_id === room.id);
+  const messages = state.messages;
   const isHost = room.host_user_id === state.user?.id;
   const activeUsers = state.activeUsers.map((user) => escapeHtml(user.displayName || user.username)).join(', ');
   return `
@@ -586,15 +586,18 @@ async function applyRoomSnapshot(message) {
 
 function appendChatMessage(message) {
   state.messages.push(message);
+  if (state.messages.length > 100) state.messages.splice(0, state.messages.length - 100);
   const html = renderChatMessage(message);
   for (const selector of ['#chatMessages', '#fullscreenChatMessages']) {
     const chat = document.querySelector(selector);
     if (!chat) continue;
+    const wasNearBottom = chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80;
     chat.querySelector('.chat-empty')?.remove();
     const wrapper = document.createElement('div');
     wrapper.innerHTML = html;
     if (wrapper.firstElementChild) chat.append(wrapper.firstElementChild);
-    chat.scrollTop = chat.scrollHeight;
+    while (chat.children.length > 100) chat.firstElementChild?.remove();
+    if (wasNearBottom) chat.scrollTop = chat.scrollHeight;
   }
 
   const toastStack = document.querySelector('#chatToasts');
@@ -624,6 +627,9 @@ async function handleRoomSocketMessage(event, roomId) {
   if (message.roomId && message.roomId !== state.roomId) return;
 
   if (message.type === 'room_snapshot' || message.type === 'room_state') {
+    state.reconnectAttempts = 0;
+    const status = document.querySelector('#chatConnection');
+    if (status) status.textContent = 'CONNECTED';
     await applyRoomSnapshot(message);
   } else if (message.type === 'presence') {
     updateRoomPresence(message.viewerCount, message.users);
@@ -687,10 +693,9 @@ function connectRoomSocket(roomId) {
       state.socket = socket;
       state.socketRoomId = roomId;
       socket.addEventListener('open', () => {
-        state.reconnectAttempts = 0;
         socket.send(JSON.stringify({ type: 'join_room', roomId }));
         const status = document.querySelector('#chatConnection');
-        if (status) status.textContent = 'CONNECTED';
+        if (status) status.textContent = 'SYNCING';
       });
       socket.addEventListener('message', (event) => handleRoomSocketMessage(event, roomId));
       socket.addEventListener('close', () => {
@@ -757,7 +762,7 @@ function mountWatchPlayer() {
           } catch {
             // A provider can briefly be unavailable while buffering.
           }
-        }, 1000);
+        }, 3000);
       }
     }).catch((error) => {
       container.textContent = error.message || 'This media provider could not be loaded.';
@@ -894,21 +899,7 @@ async function handleClick(event) {
       state.activeUsers = [];
       state.playback = null;
       navigate('watch', room.id);
-      // Load chat history and missions in the background so they do not delay the player.
-      fetchJson(`/api/rooms/${roomId}/messages`).then(({ messages }) => {
-        if (state.page === 'watch' && state.roomId === room.id) {
-          state.messages = messages || [];
-          const chat = document.querySelector('#chatMessages');
-          const fullscreenChat = document.querySelector('#fullscreenChatMessages');
-          for (const target of [chat, fullscreenChat]) {
-            if (!target) continue;
-            target.innerHTML = state.messages.length
-              ? state.messages.map(renderChatMessage).join('')
-              : '<div class="chat-empty">No messages yet.</div>';
-            target.scrollTop = target.scrollHeight;
-          }
-        }
-      }).catch(() => {});
+      // Chat is transient and never loaded from a database. Keep room setup off the player's critical path.
       refreshMissions();
     } catch (error) {
       showToast(error.message, 'error');
@@ -1107,8 +1098,8 @@ async function loadInitial() {
   };
 
   if (directWatchRoute) {
-    // Load the requested room first. The general home dashboard and chat history
-    // must not block the player or its initial playback snapshot.
+    // Load the requested room first. The general home dashboard must not block
+    // the player or its initial playback snapshot.
     const requestedRoomId = state.roomId;
     const watchPromise = (async () => {
       await fetchJson(`/api/rooms/${encodeURIComponent(requestedRoomId)}/join`, { method: 'POST' });
@@ -1118,20 +1109,6 @@ async function loadInitial() {
       state.playback = snapshot.playback;
       state.activeUsers = snapshot.users || [];
 
-      fetchJson(`/api/rooms/${encodeURIComponent(requestedRoomId)}/messages`).then(({ messages }) => {
-        if (state.page !== 'watch' || state.roomId !== requestedRoomId) return;
-        state.messages = messages || [];
-        const html = state.messages.length
-          ? state.messages.map(renderChatMessage).join('')
-          : '<div class="chat-empty">No messages yet.</div>';
-        for (const selector of ['#chatMessages', '#fullscreenChatMessages']) {
-          const chat = document.querySelector(selector);
-          if (chat) {
-            chat.innerHTML = html;
-            chat.scrollTop = chat.scrollHeight;
-          }
-        }
-      }).catch(() => {});
     })();
 
     const [meResult, watchResult] = await Promise.allSettled([mePromise, watchPromise]);
@@ -1195,6 +1172,16 @@ async function boot() {
   document.addEventListener('click', handleClick);
   appEl.addEventListener('submit', handleSubmit);
   appEl.addEventListener('input', handleInput);
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'visible' || state.page !== 'watch' || !state.roomId || !state.user) return;
+    const socket = state.socket;
+    if (socket && socket.readyState < WebSocket.CLOSING) {
+      // Browsers may suspend idle tabs and leave a stale-but-OPEN WebSocket behind.
+      socket.close(4000, 'Refreshing watch connection after tab resume');
+      return;
+    }
+    scheduleRoomReconnect(state.roomId);
+  });
   window.addEventListener('hashchange', () => {
     const previousPage = state.page;
     const previousRoomId = state.roomId;
@@ -1217,7 +1204,7 @@ async function boot() {
   window.clearInterval(state.roomRefreshTimer);
   state.roomRefreshTimer = window.setInterval(() => {
     if (state.page === 'home' || state.page === 'rooms') refreshRooms();
-  }, 2000);
+  }, 5000);
 }
 
 boot();
