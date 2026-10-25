@@ -237,7 +237,7 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
         const entries = rows.slice(0, 10).map((row, index) => {
           const rank = rankLabels[index] || `\`#${index + 1}\``;
           const name = String(row.display_name || row.displayName || 'Unknown member')
-            .replace(/[\\r\\n\\t]/g, ' ').slice(0, 60);
+            .replace(/\s+/g, ' ').slice(0, 60);
           const detail = isStudy
             ? String(row.duration ?? '0')
             : `Level ${Number(row.level || 0).toLocaleString()}  ·  ${Number(row.xp || 0).toLocaleString()} XP`;
