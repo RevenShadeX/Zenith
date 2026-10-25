@@ -1,6 +1,6 @@
 'use strict';
 
-const { Client, Events, GatewayIntentBits, PermissionFlagsBits, ApplicationCommandOptionType, ChannelType } = require('discord.js');
+const { Client, Events, GatewayIntentBits, PermissionFlagsBits, ApplicationCommandOptionType, ChannelType, EmbedBuilder } = require('discord.js');
 
 const COMMANDS = [
   {
@@ -219,19 +219,40 @@ function createDiscordBot({ token, guildId, onMessage, onReady, onError = consol
 
       if (interaction.commandName === 'leaderboard') {
         const type = interaction.options.getString('type') || 'xp';
-        if (type === 'study_vc') {
-          const rows = await onLevel?.('study_vc') || [];
-          if (!rows.length) return interaction.reply({ content: 'No study VC time has been recorded yet.', ephemeral: true });
-          const lines = rows.slice(0, 10).map((row, index) =>
-            `**${index + 1}.** ${row.display_name || row.displayName} — **${row.duration}**`);
-          return interaction.reply({ content: `**Zenith Study VC Leaderboard**\n${lines.join('\n')}` });
-        }
+        const isStudy = type === 'study_vc';
         const period = interaction.options.getString('period') || 'this_month';
-        const rows = await onLevel?.('leaderboard', period) || [];
-        if (!rows.length) return interaction.reply({ content: 'No Zenith XP data yet.', ephemeral: true });
-        const lines = rows.slice(0, 10).map((row, index) =>
-          `**${index + 1}.** ${row.displayName} — Level ${row.level} · ${Number(row.xp).toLocaleString()} XP`);
-        return interaction.reply({ content: `**Zenith XP Leaderboard — ${period.replace('_', ' ')}**\n${lines.join('\n')}` });
+        const rows = (isStudy
+          ? await onLevel?.('study_vc')
+          : await onLevel?.('leaderboard', period)) || [];
+
+        if (!rows.length) {
+          return interaction.reply({
+            content: isStudy ? 'No study VC time has been recorded yet.' : 'No Zenith XP data yet.',
+            ephemeral: true,
+          });
+        }
+
+        const periodLabels = { today: 'Today', this_week: 'This Week', this_month: 'This Month' };
+        const rankLabels = ['🥇', '🥈', '🥉'];
+        const entries = rows.slice(0, 10).map((row, index) => {
+          const rank = rankLabels[index] || `\`#${index + 1}\``;
+          const name = String(row.display_name || row.displayName || 'Unknown member')
+            .replace(/[\\r\\n\\t]/g, ' ').slice(0, 60);
+          const detail = isStudy
+            ? String(row.duration ?? '0')
+            : `Level ${Number(row.level || 0).toLocaleString()}  ·  ${Number(row.xp || 0).toLocaleString()} XP`;
+          return `${rank}  **${name}**\n       ${detail}`;
+        });
+
+        const embed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setAuthor({ name: 'ZENITH  /  COMMUNITY RANKINGS', iconURL: interaction.guild?.iconURL() || undefined })
+          .setTitle(isStudy ? 'Study Leaderboard' : 'Activity Leaderboard')
+          .setDescription(`${isStudy ? 'Total time in the study voice channel' : periodLabels[period] || 'This Month'}\n\n${entries.join('\n\n')}`)
+          .setFooter({ text: `Top ${entries.length} members  •  Zenith` })
+          .setTimestamp();
+
+        return interaction.reply({ embeds: [embed] });
       }
 
       if (interaction.commandName === 'set') {
