@@ -102,7 +102,7 @@ test('default runtime enforces Discord identity and synchronizes host-controlled
   const pageHtml = await pageResponse.text();
   assert.match(pageHtml, /href="\/css\/style\.css\?v=6"/);
   assert.match(pageHtml, /src="\/js\/media-providers\.js\?v=10"/);
-  assert.match(pageHtml, /src="\/js\/app\.js\?v=10"/);
+  assert.match(pageHtml, /src="\/js\/app\.js\?v=11"/);
 
   const cssResponse = await request('/css/style.css?v=6');
   assert.equal(cssResponse.status, 200);
@@ -118,10 +118,13 @@ test('default runtime enforces Discord identity and synchronizes host-controlled
   const youtubePauseBlock = mediaScript.slice(youtubePauseStart, mediaScript.indexOf("\n        }", youtubePauseStart));
   assert.ok(youtubePauseBlock.indexOf("seekTo(position, true)") < youtubePauseBlock.indexOf("pauseVideo()"), "YouTube pause must seek before issuing the final pause");
 
-  const appScriptResponse = await request('/js/app.js?v=10');
+  const appScriptResponse = await request('/js/app.js?v=11');
   assert.equal(appScriptResponse.status, 200);
   assert.match(appScriptResponse.headers.get('content-type') || '', /javascript/i);
-  assert.match(await appScriptResponse.text(), /function playbackPositionNow/);
+  const appScript = await appScriptResponse.text();
+  assert.match(appScript, /function playbackPositionNow/);
+  assert.match(appScript, /visibilitychange/);
+  assert.match(appScript, /state.messages.length > 100/);
 
   const login = await request('/auth/discord');
   assert.equal(login.status, 503);
@@ -156,7 +159,9 @@ test('default runtime enforces Discord identity and synchronizes host-controlled
     body: JSON.stringify({ locked: false }),
   }, hostId);
   assert.equal((await request(`/api/rooms/${room.id}/join`, { method: 'POST' }, guestId)).status, 200);
-  assert.equal((await request(`/api/rooms/${room.id}/messages`, {}, guestId)).status, 200);
+  const chatHistoryResponse = await request(`/api/rooms/${room.id}/messages`, {}, guestId);
+  assert.equal(chatHistoryResponse.status, 200);
+  assert.deepEqual((await chatHistoryResponse.json()).messages, []);
   assert.equal((await request(`/api/rooms/${room.id}/leave`, { method: 'POST' }, guestId)).status, 200);
   assert.equal((await request(`/api/rooms/${room.id}/messages`, {}, guestId)).status, 403);
   assert.equal((await request(`/api/rooms/${room.id}/join`, { method: 'POST' }, guestId)).status, 200);
@@ -231,7 +236,7 @@ test('default runtime enforces Discord identity and synchronizes host-controlled
   const endedChat = waitForMessage(hostConnection.socket, (message) => message.type === 'room_ended' && message.reason === 'ended');
   hostConnection.socket.send(JSON.stringify({ type: 'chat_message', roomId: room.id, text: 'This should not be stored.' }));
   await endedChat;
-  assert.equal(Number((await runtime.database.get('SELECT COUNT(*) AS count FROM room_messages WHERE room_id = ?', [room.id])).count), 1);
+  assert.equal(Number((await runtime.database.get('SELECT COUNT(*) AS count FROM room_messages WHERE room_id = ?', [room.id])).count), 0);
 
   const hostEndRoom = await request('/api/rooms', {
     method: 'POST',
